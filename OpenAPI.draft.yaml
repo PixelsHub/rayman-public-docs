@@ -1,0 +1,5053 @@
+openapi: 3.1.0
+info:
+  title: PixelsHub Rayman
+  description: |
+    Draft contract for the Rayman 1.x API aligned with the new entity-based data model.
+    Authentication accepts both bearer JWT headers and the `rayman_auth` cookie.
+  contact:
+    email: desarrollo@pixels-hub.com
+  license:
+    name: All Rights Reserved
+    url: https://choosealicense.com/no-permission/
+  version: 1.0.0-draft.1
+servers:
+  - url: https://rayman.pixels-hub.com/dev/api
+    description: Development server
+  - url: http://localhost/rayman/api
+    description: Local server
+  - url: https://cableo.es/v1/api
+    description: Production server
+security:
+  - jwt: []
+tags:
+  - name: Authentication
+  - name: Users
+  - name: Actors
+  - name: Permission Groups
+  - name: Permissions
+  - name: Entity Variants
+  - name: Entity Variants > Children
+  - name: Entity Variants > Signs
+  - name: Entity Variants > Tags
+  - name: Entities
+  - name: Entities > Assets
+  - name: Entities > Relations
+  - name: Entities > Signs
+  - name: Entities > Tags
+  - name: Assets
+  - name: Signs > Icons
+  - name: Procedures
+  - name: Procedures > Steps
+paths:
+  /auth/login:
+    post:
+      tags:
+        - Authentication
+      security: []
+      summary: Authenticates a user and returns a JWT token while also setting the browser auth cookie
+      description: |
+        The authenticated session can be used in two ways:
+        - as a bearer token in the `Authorization` header
+        - as the `rayman_auth` cookie in browser-based clients
+
+        Tenant selection flow:
+        - If the user only has access to one organization, the returned token is already bound to that organization.
+        - If the user has access to multiple organizations and no `organizationSlug` is provided, the returned token has no tenant selected and the response includes the organizations available for selection.
+        - A token without tenant selection is only valid for authentication endpoints.
+        - Tenant-based module endpoints must reject a token without selected organization with `401` or `403`.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+                - user
+              properties:
+                user:
+                  type: string
+                password:
+                  type: string
+                organizationSlug:
+                  type: string
+                  description: Organization slug to bind the returned token to a tenant.
+              example:
+                user: expert@demo.com
+                password: demo
+        required: true
+      responses:
+        '200':
+          description: |
+            Authenticated session.
+            The same JWT is returned in the response body for programmatic clients and also set as the `rayman_auth` cookie for browser clients.
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  token:
+                    type: string
+                    example: xxxxx.yyyyy.zzzzz
+                  actor:
+                    $ref: '#/components/schemas/Actor'
+                  organization:
+                    $ref: '#/components/schemas/OrganizationSelection'
+                    description: Present when the returned token is bound to a tenant.
+                  displayName:
+                    type: string
+                    description: Present when the user must choose a tenant in a second step.
+                  organizations:
+                    type: array
+                    description: Present only when the user must choose a tenant in a second step.
+                    items:
+                      $ref: '#/components/schemas/OrganizationSelection'
+        '400':
+          description: Bad Request. *user* or *password* is not valid.
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /auth/refresh:
+    post:
+      tags:
+        - Authentication
+      security:
+        - cookie: []
+        - jwt: []
+      summary: Restores and renews a browser session
+      description: |
+        Accepts a valid JWT from the `rayman_auth` HttpOnly cookie or from the `Authorization: Bearer <token>` header.
+        When both are supplied, a valid cookie takes precedence; if one credential is invalid and the other is valid,
+        the valid credential is used. If neither is valid, the response is `401`.
+
+        The response has the same shape as a successful tenant-bound login: it returns a newly issued bearer JWT,
+        refreshes the `rayman_auth` cookie, includes the authenticated actor, and preserves the `org` tenant claim
+        from the credential used to authenticate the request. Browser clients must send the request with credentials
+        enabled; the cookie is HttpOnly and is not intended to be read by client-side code.
+      responses:
+        '200':
+          description: Renewed authenticated session. Tenant-bound sessions include `actor` and `organization`; sessions without a selected tenant include `displayName` and `organizations`.
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - token
+                properties:
+                  token:
+                    type: string
+                    description: Newly issued bearer JWT.
+                    example: xxxxx.yyyyy.zzzzz
+                  actor:
+                    $ref: '#/components/schemas/Actor'
+                  organization:
+                    $ref: '#/components/schemas/OrganizationSelection'
+                    description: Present when the renewed token is bound to a tenant.
+                  displayName:
+                    type: string
+                    description: Present when the renewed token has no tenant selected.
+                  organizations:
+                    type: array
+                    description: Present only when the renewed token has no tenant selected.
+                    items:
+                      $ref: '#/components/schemas/OrganizationSelection'
+        '401':
+          $ref: '#/components/responses/401'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /auth/login/organizations:
+    get:
+      tags:
+        - Authentication
+      summary: Returns organizations accessible by the authenticated user
+      description: |
+        Intended for the second step of the multi-tenant login flow, when the current token is authenticated but not yet bound to a tenant.
+      responses:
+        '200':
+          description: List of organizations the user can access
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OrganizationSelection'
+        '401':
+          $ref: '#/components/responses/401'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /auth/login/organizations/{organizationSlug}:
+    get:
+      tags:
+        - Authentication
+      summary: Returns one organization if the authenticated user can access it
+      parameters:
+        - in: path
+          name: organizationSlug
+          required: true
+          description: Organization slug.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Organization data
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/OrganizationSelection'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /auth/login/organizations/{organizationSlug}/select:
+    post:
+      tags:
+        - Authentication
+      summary: Selects an organization and refreshes the JWT so it becomes bound to that tenant
+      description: |
+        Returns a token valid for tenant-based module APIs.
+        The token is returned in the response body and also set as the `rayman_auth` cookie.
+      parameters:
+        - in: path
+          name: organizationSlug
+          required: true
+          description: Organization slug.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Refreshed token bound to selected organization
+          content:
+            application/json:
+              schema:
+                type: object
+                required:
+                  - token
+                  - actor
+                  - organization
+                properties:
+                  token:
+                    type: string
+                    example: xxxxx.yyyyy.zzzzz
+                  actor:
+                    $ref: '#/components/schemas/Actor'
+                  organization:
+                    $ref: '#/components/schemas/OrganizationSelection'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /auth/password/change:
+    post:
+      tags:
+        - Authentication
+      security:
+        - jwt: []
+        - {}
+      summary: Changes a password either for the authenticated user or by using a one-time reset token
+      description: |
+        This endpoint supports two valid flows:
+        - authenticated password change, using `oldPassword` + `newPassword`
+        - password reset completion, using a one-time `token` + `newPassword`
+
+        The request body determines which flow is being used.
+      requestBody:
+        content:
+          application/json:
+            schema:
+              oneOf:
+                - required:
+                    - oldPassword
+                    - newPassword
+                  description: Used for an authenticated user to change their password
+                  properties:
+                    oldPassword:
+                      type: string
+                      format: password
+                    newPassword:
+                      type: string
+                      format: password
+                  example:
+                    oldPassword: myOldPassword
+                    newPassword: newPassword
+                - required:
+                    - token
+                    - newPassword
+                  description: Used for a non authenticated user to change their password, identifying themselves with a previously given token, for example password recovery
+                  properties:
+                    token:
+                      type: string
+                    newPassword:
+                      type: string
+                      format: password
+                  example:
+                    token: HIKEOEJKMXX
+                    newPassword: newPassword
+      responses:
+        '204':
+          description: Password changed succesfully.
+        '400':
+          description: Bad Request. *oldPassword* is wrong or *newPassword* is not valid.
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          description: Unexpected Error
+  /auth/password/reset:
+    post:
+      tags:
+        - Authentication
+      security: []
+      summary: Sends a password reset email with a one-time link to choose a new password
+      requestBody:
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              required:
+                - email
+              properties:
+                email:
+                  type: string
+                  format: email
+          application/json:
+            schema:
+              properties:
+                email:
+                  type: string
+                  format: email
+        required: true
+      responses:
+        '204':
+          description: Password reset succesfully.
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          description: Not Found. User ID or email doesn't exist.
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          description: Unexpected Error
+  /users:
+    get:
+      tags:
+        - Users
+      summary: Gets an array of users.
+      parameters:
+        - name: disabled
+          in: query
+          required: false
+          schema:
+            type: boolean
+        - name: email
+          in: query
+          required: false
+          schema:
+            type: string
+            format: email
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Users
+      summary: Creates a new user.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserCore'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /users/current:
+    get:
+      tags:
+        - Users
+      summary: Gets the current authenticated user.
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/401'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /users/{userID}:
+    get:
+      tags:
+        - Users
+      summary: Gets a user by ID.
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    patch:
+      tags:
+        - Users
+      summary: Updates a user.
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UserUpdate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Users
+      summary: Deletes a user.
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /actors:
+    get:
+      tags:
+        - Actors
+      summary: Gets actors visible in the current tenant.
+      parameters:
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: user'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Actor'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /actors/current:
+    get:
+      tags:
+        - Actors
+      summary: Gets the current authenticated actor and creates it if it does not exist yet.
+      parameters:
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: user'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Actor'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /actors/{actorID}:
+    get:
+      tags:
+        - Actors
+      summary: Gets an actor by ID.
+      parameters:
+        - name: actorID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: user'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Actor'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/groups:
+    get:
+      tags:
+        - Permission Groups
+      summary: Gets all permission groups for the current tenant.
+      parameters:
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: users,grants'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PermissionGroup'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Permission Groups
+      summary: Creates a permission group.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionGroupCore'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionGroup'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/groups/{groupID}:
+    get:
+      tags:
+        - Permission Groups
+      summary: Gets a permission group by ID.
+      parameters:
+        - name: groupID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: users,grants'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionGroup'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    patch:
+      tags:
+        - Permission Groups
+      summary: Updates a permission group.
+      parameters:
+        - name: groupID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PermissionGroupUpdate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionGroup'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Permission Groups
+      summary: Deletes a permission group.
+      parameters:
+        - name: groupID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/groups/{groupID}/users:
+    get:
+      tags:
+        - Permission Groups
+      summary: Gets the users currently assigned to a permission group.
+      parameters:
+        - name: groupID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Permission Groups
+      summary: Adds users to a permission group.
+      parameters:
+        - name: groupID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Permission Groups
+      summary: Removes users from a permission group.
+      parameters:
+        - name: groupID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/users/{userID}:
+    get:
+      tags:
+        - Permissions
+      summary: Gets all permission grants for a specific user principal.
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: include
+          in: query
+          required: false
+          description: 'CSV list of sections to include. Supported values: system,entities'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalPermissionBundle'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/users/{userID}/effective:
+    get:
+      tags:
+        - Permissions
+      summary: Gets computed effective permissions for a specific user.
+      description: |
+        Supports `userID=current` to resolve the authenticated token user.
+        This endpoint only returns:
+        - effective system permissions
+        - effective global entity permissions (`entityID = null` grants), resolved by `variant`
+        It intentionally excludes entity-specific grants.
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/UUID'
+              - type: string
+                enum:
+                  - current
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EffectiveUserPermissions'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/users/{userID}/grants:
+    get:
+      tags:
+        - Permissions
+      summary: Gets grants for a specific user principal.
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: type
+          in: query
+          required: false
+          description: Filter by grant type.
+          schema:
+            type: string
+            enum:
+              - system
+              - entity
+        - name: scope
+          in: query
+          required: false
+          description: Applies only when `type=system`.
+          schema:
+            $ref: '#/components/schemas/SystemPermissionScope'
+        - name: entityID
+          in: query
+          required: false
+          description: Applies only when `type=entity`.
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrincipalGrant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Permissions
+      summary: Creates a grant for a specific user principal.
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrincipalGrantWrite'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalGrant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/users/{userID}/grants/{grantID}:
+    patch:
+      tags:
+        - Permissions
+      summary: Updates a grant for a specific user principal.
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: grantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrincipalGrantWrite'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalGrant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Permissions
+      summary: Deletes a grant for a specific user principal.
+      parameters:
+        - name: userID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: grantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: type
+          in: query
+          required: false
+          description: Optional disambiguation when deleting by grant ID.
+          schema:
+            type: string
+            enum:
+              - system
+              - entity
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/groups/{groupID}/grants:
+    get:
+      tags:
+        - Permissions
+      summary: Gets grants for a specific group principal.
+      parameters:
+        - name: groupID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - system
+              - entity
+        - name: scope
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SystemPermissionScope'
+        - name: entityID
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrincipalGrant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Permissions
+      summary: Creates a grant for a specific group principal.
+      parameters:
+        - name: groupID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrincipalGrantWrite'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalGrant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/groups/{groupID}/grants/{grantID}:
+    patch:
+      tags:
+        - Permissions
+      summary: Updates a grant for a specific group principal.
+      parameters:
+        - name: groupID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: grantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrincipalGrantWrite'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalGrant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Permissions
+      summary: Deletes a grant for a specific group principal.
+      parameters:
+        - name: groupID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: grantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - system
+              - entity
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/everyone/grants:
+    get:
+      tags:
+        - Permissions
+      summary: Gets grants for the global everyone principal.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - system
+              - entity
+        - name: scope
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/SystemPermissionScope'
+        - name: entityID
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/PrincipalGrant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Permissions
+      summary: Creates a grant for the global everyone principal.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrincipalGrantWrite'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalGrant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/everyone/grants/{grantID}:
+    patch:
+      tags:
+        - Permissions
+      summary: Updates a grant for the global everyone principal.
+      parameters:
+        - name: grantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PrincipalGrantWrite'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PrincipalGrant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Permissions
+      summary: Deletes a grant for the global everyone principal.
+      parameters:
+        - name: grantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - system
+              - entity
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/entities/{entityID}/principals:
+    get:
+      tags:
+        - Permissions
+      summary: Gets all entity grants anchored at an entity, organized for principal-focused UIs.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: principalType
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/PrincipalType'
+        - name: principalID
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityPrincipalGrants'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /permissions/entities/{entityID}/explain:
+    get:
+      tags:
+        - Permissions
+      summary: Explains why a principal can or cannot access an entity.
+      description: |
+        Returns the current effective decision for the entity and the full grant chain
+        considered during evaluation, including precedence between conflicting grants.
+        The response is a precedence-ordered list of grants (direct user, group, everyone),
+        each one marked with `applies=true|false`, and with the decisive grant explicitly flagged.
+        Designed for admin/debug tooling and permission troubleshooting UIs.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: userID
+          in: query
+          required: true
+          description: User to evaluate (nominal explain).
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: entities,variants,groups'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/PermissionExplainEntityAccess'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entity-variants:
+    get:
+      tags:
+        - Entity Variants
+      summary: Gets all entity variants available in the current tenant.
+      parameters:
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/EntityType'
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: children, signs, tags'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityVariant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Entity Variants
+      summary: Creates a new entity variant.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityVariantCore'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityVariant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entity-variants/{variantID}:
+    get:
+      tags:
+        - Entity Variants
+      summary: Gets a single entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: children, signs, tags'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityVariant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    patch:
+      tags:
+        - Entity Variants
+      summary: Updates an entity variant.
+      description: The variant type is immutable. Supplying a different `type` returns `409 Conflict`.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityVariantUpdate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntityVariant'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Entity Variants
+      summary: Deletes an entity variant.
+      description: Deletion is blocked if any entity currently uses the variant. If no entities use it, dependent records are deleted.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entity-variants/{variantID}/signs:
+    get:
+      tags:
+        - Entity Variants > Signs
+      summary: Gets all signs defined for an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: type
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - icon
+              - verification
+              - warning
+              - prohibition
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Sign'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Entity Variants > Signs
+      summary: Creates a sign under an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VariantSignCreate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sign'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entity-variants/{variantID}/signs/{signID}:
+    get:
+      tags:
+        - Entity Variants > Signs
+      summary: Gets a sign by ID within an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: signID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sign'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    patch:
+      tags:
+        - Entity Variants > Signs
+      summary: Updates a sign within an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: signID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SignUpdate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Sign'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Entity Variants > Signs
+      summary: Deletes a sign from an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: signID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entity-variants/{variantID}/children:
+    get:
+      tags:
+        - Entity Variants > Children
+      summary: Gets the child variants allowed under an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityVariantRef'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Entity Variants > Children
+      summary: Adds allowed child variants under an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Entity Variants > Children
+      summary: Removes allowed child variants from an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entity-variants/{variantID}/tags:
+    get:
+      tags:
+        - Entity Variants > Tags
+      summary: Gets all tags defined for an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Entity Variants > Tags
+      summary: Creates a tag under an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/VariantTagCreate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entity-variants/{variantID}/tags/{tagID}:
+    get:
+      tags:
+        - Entity Variants > Tags
+      summary: Gets a tag by ID within an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: tagID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    patch:
+      tags:
+        - Entity Variants > Tags
+      summary: Updates a tag within an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: tagID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/TagUpdate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Tag'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Entity Variants > Tags
+      summary: Deletes a tag from an entity variant.
+      parameters:
+        - name: variantID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: tagID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities:
+    get:
+      tags:
+        - Entities
+      summary: Gets entities filtered by variant, type or parent.
+      parameters:
+        - name: variantID
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: type
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/EntityType'
+        - name: status
+          in: query
+          required: false
+          description: Optional entity status filter. When omitted, the response includes every status allowed by the caller's permissions.
+          schema:
+            $ref: '#/components/schemas/EntityStatus'
+        - name: parentID
+          in: query
+          required: false
+          description: Parent entity filter. Use a UUID to filter direct children of that parent. Use the literal `null` to filter root entities (`parentID IS NULL`).
+          schema:
+            type: string
+        - name: includeDescendants
+          in: query
+          required: false
+          description: When `true` and `parentID` is a UUID, includes descendants up to `maxDepth`. Ignored when `parentID=null`.
+          schema:
+            type: boolean
+        - name: maxDepth
+          in: query
+          required: false
+          description: Maximum descendant distance from `parentID` when `includeDescendants=true`. Defaults to `1` (direct children); use `-1` for the full subtree. Values of `0` and less than `-1` are invalid. Ignored unless `parentID` is a UUID and `includeDescendants=true`.
+          schema:
+            default: 1
+            oneOf:
+              - const: -1
+              - type: integer
+                minimum: 1
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: assets, relations, signs, tags, parent, variant, ancestors'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Entity'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Entities
+      summary: Creates a generic entity.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityCore'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/search:
+    get:
+      tags:
+        - Entities
+      summary: Searches entities by text, tags, ancestor or status.
+      parameters:
+        - name: text
+          in: query
+          required: false
+          description: Case-insensitive partial match against the entity name. Required unless tagIDs, parentID or status is provided.
+          schema:
+            type: string
+        - name: includeDescription
+          in: query
+          required: false
+          description: When true, text also matches the entity description. Defaults to false.
+          schema:
+            type: boolean
+            default: false
+        - name: tagIDs
+          in: query
+          required: false
+          description: CSV list of tag UUIDs. Matches entities with any supplied tag.
+          schema:
+            type: string
+        - name: parentID
+          in: query
+          required: false
+          description: UUID of an ancestor entity. Matches all descendants but not the ancestor itself.
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: status
+          in: query
+          required: false
+          description: Optional entity status filter. It combines with text, tagIDs and parentID using AND. When omitted, the response includes every status allowed by the caller's permissions.
+          schema:
+            $ref: '#/components/schemas/EntityStatus'
+        - name: limit
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 1
+            default: 50
+        - name: offset
+          in: query
+          required: false
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: assets, relations, signs, tags, parent, variant, ancestors'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Search completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/EntitySearchResponse'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/by-3d-mapping:
+    get:
+      tags:
+        - Entities > 3D
+      summary: Resolves an entity from its 3D mapping reference.
+      description: Uses `mainAssetID` when `parentAssetPath` is omitted or empty. Otherwise resolves by `parentAssetID + parentAssetPath`.
+      parameters:
+        - name: assetID
+          in: query
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: parentAssetPath
+          in: query
+          required: false
+          schema:
+            type: string
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: assets, relations, signs, tags, parent, variant, ancestors'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/{entityID}:
+    get:
+      tags:
+        - Entities
+      summary: Gets an entity by ID.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: assets, relations, signs, tags, parent, variant, ancestors'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    patch:
+      tags:
+        - Entities
+      summary: 'Updates an entity. In PATCH, omitted properties are left unchanged. Sending `parentID: null` removes the parent relation.'
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EntityUpdate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Entities
+      summary: Deletes an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/{entityID}/duplicate:
+    post:
+      tags:
+        - Entities
+      summary: Duplicates an entity subtree including composed records and linked assets.
+      description: Creates a full copy of the entity and descendants. Asset files and asset rows are duplicated so the clone does not share asset references with the source.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/{entityID}/3d-mapping:
+    get:
+      tags:
+        - Entities > 3D
+      summary: Gets the 3D mapping attached to an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity3dMapping'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    put:
+      tags:
+        - Entities > 3D
+      summary: Creates or updates the 3D mapping attached to an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/Entity3dMapping'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Entity3dMapping'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Entities > 3D
+      summary: Deletes the 3D mapping attached to an entity without deleting the entity itself.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/{entityID}/assets:
+    get:
+      tags:
+        - Entities > Assets
+      summary: Gets the assets attached to an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Entities > Assets
+      summary: Adds assets to an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Entities > Assets
+      summary: Removes assets from an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/{entityID}/relations:
+    get:
+      tags:
+        - Entities > Relations
+      summary: Gets the soft-related entities attached to an entity.
+      description: Returns relations where the requested entity appears either as `entity_a_id` or `entity_b_id`.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/EntityRef'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Entities > Relations
+      summary: Adds soft-related entities to an entity.
+      description: Stored as a soft symmetric relation, so the link is visible from both entities.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Entities > Relations
+      summary: Removes soft-related entities from an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/{entityID}/signs:
+    get:
+      tags:
+        - Entities > Signs
+      summary: Gets the signs attached to an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Sign'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Entities > Signs
+      summary: Adds signs to an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Entities > Signs
+      summary: Removes signs from an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/{entityID}/tags:
+    get:
+      tags:
+        - Entities > Tags
+      summary: Gets the tags attached to an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Tag'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Entities > Tags
+      summary: Adds tags to an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Entities > Tags
+      summary: Removes tags from an entity.
+      parameters:
+        - name: entityID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/bulk:
+    parameters:
+      - $ref: '#/components/parameters/components-idempotency-key'
+      - $ref: '#/components/parameters/components-preview'
+    post:
+      tags:
+        - Entities
+      summary: Creates entities atomically using client-assigned UUIDs.
+      description: Parents may reference entities in the same request or entities committed by an earlier request. `Idempotency-Key` is optional but recommended for safe retries. Its current server implementation is in-memory and therefore does not survive process restarts or coordinate multiple instances.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkEntityCreateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/components-bulk-success'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/components-bulk-error'
+        '409':
+          $ref: '#/components/responses/components-bulk-error'
+        '422':
+          $ref: '#/components/responses/components-bulk-error'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    patch:
+      tags:
+        - Entities
+      summary: Applies ordered entity changes to server-resolved targets in one transaction.
+      description: |
+        Every operation resolves its target from the hierarchy as it existed when the request began. Operations are then applied in request order and committed atomically.
+        `entityIDs` and `subtreeRootIDs` may be combined; every subtree includes its root, including when the root is a leaf. `variantID` is an alternative positive selector. Exclusions always win.
+        A `parentID` change is accepted only for an explicit `entityIDs` target. Tags and signs must exist and are assigned only to entities whose variant supports them; incompatible target/resource pairs are skipped.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkEntityOperationsRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/components-bulk-success'
+        '400':
+          $ref: '#/components/responses/400'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/components-bulk-error'
+        '409':
+          $ref: '#/components/responses/components-bulk-error'
+        '422':
+          $ref: '#/components/responses/components-bulk-error'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/bulk/delete:
+    parameters:
+      - $ref: '#/components/parameters/components-idempotency-key'
+      - $ref: '#/components/parameters/components-preview'
+    post:
+      tags:
+        - Entities
+      summary: Deletes explicit entities or server-resolved subtrees atomically.
+      description: Entity deletion cascades through descendants. An exclusion is rejected when an included ancestor would still delete that entity through the cascade.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkDeleteRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/components-bulk-success'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/components-bulk-error'
+        '409':
+          $ref: '#/components/responses/components-bulk-error'
+        '422':
+          $ref: '#/components/responses/components-bulk-error'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /entities/bulk/duplicate:
+    parameters:
+      - $ref: '#/components/parameters/components-idempotency-key'
+      - $ref: '#/components/parameters/components-preview'
+    post:
+      tags:
+        - Entities
+      summary: Duplicates multiple independent entity subtrees atomically.
+      description: Each `subtreeRootID` identifies a root whose complete subtree is duplicated. Every duplicated root remains under its current parent. The response includes the generated IDs for all copies and a source-to-copy mapping for each requested root.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/BulkDuplicateRequest'
+      responses:
+        '200':
+          $ref: '#/components/responses/components-bulk-success'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/components-bulk-error'
+        '409':
+          $ref: '#/components/responses/components-bulk-error'
+        '422':
+          $ref: '#/components/responses/components-bulk-error'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /assets:
+    get:
+      tags:
+        - Assets
+      summary: Gets assets filtered by type.
+      parameters:
+        - name: assetType
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - image
+              - video
+              - scene_3d
+              - model_3d
+              - document
+              - other
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Asset'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Assets
+      summary: Creates a new asset metadata record and uploads a file.
+      description: The maximum multipart request size is deployment-configurable. `rayman-core` defaults to 1.5 GiB.
+      requestBody:
+        required: true
+        content:
+          multipart/form-data:
+            schema:
+              type: object
+              properties:
+                file:
+                  type: string
+                  format: binary
+                assetType:
+                  type: string
+                  description: 'Optional override. When omitted, it is inferred from the file MIME type: `image/*`, `video/*`, GLB, and PDF are classified as image, video, model_3d, and document respectively.'
+                  enum:
+                    - image
+                    - video
+                    - scene_3d
+                    - model_3d
+                    - document
+                    - other
+                metadata:
+                  $ref: '#/components/schemas/Metadata'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '413':
+          description: The multipart request exceeds the configured upload size limit.
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /assets/{assetID}:
+    get:
+      tags:
+        - Assets
+      summary: Gets an asset by ID.
+      parameters:
+        - name: assetID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Asset'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Assets
+      summary: Deletes an asset if it is no longer referenced.
+      parameters:
+        - name: assetID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /assets/{assetID}/download:
+    get:
+      tags:
+        - Assets
+      summary: Downloads the binary contents of an asset.
+      parameters:
+        - name: assetID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: Range
+          in: header
+          required: false
+          description: Byte range request (for partial downloads), for example `bytes=0-1048575`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully.
+          content:
+            application/octet-stream: {}
+        '206':
+          description: Partial content returned for a valid Range request.
+          content:
+            application/octet-stream: {}
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '416':
+          description: Requested Range Not Satisfiable.
+        5XX:
+          $ref: '#/components/responses/5XX'
+    head:
+      tags:
+        - Assets
+      summary: Returns headers for an asset download (without body).
+      parameters:
+        - name: assetID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: Range
+          in: header
+          required: false
+          description: Byte range request (for partial download headers), for example `bytes=0-1048575`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully.
+        '206':
+          description: Partial content headers for a valid Range request.
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '416':
+          description: Requested Range Not Satisfiable.
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /assets/{assetID}/thumbnail:
+    get:
+      tags:
+        - Assets
+      summary: Gets an image thumbnail, or redirects to the original while it is unavailable.
+      description: Only JPEG and PNG image assets have generated thumbnails. If the requested thumbnail is not generated or its file is missing, returns a non-cacheable 302 redirect to `/assets/{assetID}/download`.
+      parameters:
+        - name: assetID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: size
+          in: query
+          required: false
+          description: Target maximum edge. Defaults to `md`.
+          schema:
+            type: string
+            enum:
+              - sm
+              - md
+              - lg
+            default: md
+      responses:
+        '200':
+          description: Thumbnail binary content.
+          content:
+            image/jpeg: {}
+            image/png: {}
+        '302':
+          description: Thumbnail is unavailable; follow the Location header to download the original asset. Response has Cache-Control no-store.
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    head:
+      tags:
+        - Assets
+      summary: Returns headers for a thumbnail or its fallback redirect.
+      parameters:
+        - name: assetID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: size
+          in: query
+          required: false
+          schema:
+            type: string
+            enum:
+              - sm
+              - md
+              - lg
+            default: md
+      responses:
+        '200':
+          description: Thumbnail headers.
+        '302':
+          description: Thumbnail is unavailable; follow the Location header to download the original asset.
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /sign-icons:
+    get:
+      tags:
+        - Signs > Icons
+      summary: Lists available sign icon IDs.
+      responses:
+        '200':
+          description: Operation completed successfully.
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/UUID'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /sign-icons/{iconID}/download:
+    get:
+      tags:
+        - Signs > Icons
+      summary: Downloads a static sign icon by ID.
+      parameters:
+        - name: iconID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: Range
+          in: header
+          required: false
+          description: Byte range request (for partial downloads), for example `bytes=0-1048575`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully.
+          content:
+            image/png: {}
+            image/svg+xml: {}
+            application/octet-stream: {}
+        '206':
+          description: Partial content returned for a valid Range request.
+          content:
+            image/png: {}
+            image/svg+xml: {}
+            application/octet-stream: {}
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '416':
+          description: Requested Range Not Satisfiable.
+        5XX:
+          $ref: '#/components/responses/5XX'
+    head:
+      tags:
+        - Signs > Icons
+      summary: Returns headers for a sign icon download (without body).
+      parameters:
+        - name: iconID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: Range
+          in: header
+          required: false
+          description: Byte range request (for partial download headers), for example `bytes=0-1048575`.
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully.
+        '206':
+          description: Partial content headers for a valid Range request.
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '416':
+          description: Requested Range Not Satisfiable.
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /procedures:
+    get:
+      tags:
+        - Procedures
+      summary: Gets procedures from the entity model.
+      parameters:
+        - name: variantID
+          in: query
+          required: false
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: status
+          in: query
+          required: false
+          description: Optional entity status filter. When omitted, the response includes every status allowed by the caller's permissions.
+          schema:
+            $ref: '#/components/schemas/EntityStatus'
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: assets, relations, signs, tags, parent, variant, steps, ancestors'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Procedure'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Procedures
+      summary: Creates a procedure entity and its specialized record.
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcedureCreate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Procedure'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /procedures/{procedureID}:
+    get:
+      tags:
+        - Procedures
+      summary: Gets a procedure by ID.
+      parameters:
+        - name: procedureID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: assets, relations, signs, tags, parent, variant, steps, ancestors'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Procedure'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    patch:
+      tags:
+        - Procedures
+      summary: 'Updates a procedure. In PATCH, omitted properties are left unchanged. Sending `parentID: null` removes the parent relation.'
+      parameters:
+        - name: procedureID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcedureUpdate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Procedure'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Procedures
+      summary: Deletes a procedure and its descendant steps.
+      parameters:
+        - name: procedureID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /procedures/{procedureID}/steps:
+    get:
+      tags:
+        - Procedures > Steps
+      summary: Gets the steps belonging to a procedure.
+      parameters:
+        - name: procedureID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: assets, relations, signs, ancestors'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/ProcedureStep'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    post:
+      tags:
+        - Procedures > Steps
+      summary: Creates a step under a procedure.
+      parameters:
+        - name: procedureID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcedureStepCreate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureStep'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+  /procedures/{procedureID}/steps/{stepID}:
+    get:
+      tags:
+        - Procedures > Steps
+      summary: Gets a single procedure step.
+      parameters:
+        - name: procedureID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: stepID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: expand
+          in: query
+          required: false
+          description: 'CSV list of expansions. Supported values: assets, relations, signs, ancestors'
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureStep'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    patch:
+      tags:
+        - Procedures > Steps
+      summary: Updates a procedure step.
+      parameters:
+        - name: procedureID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: stepID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/ProcedureStepUpdate'
+      responses:
+        '200':
+          description: Operation completed successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/ProcedureStep'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+    delete:
+      tags:
+        - Procedures > Steps
+      summary: Deletes a procedure step.
+      parameters:
+        - name: procedureID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+        - name: stepID
+          in: path
+          required: true
+          schema:
+            $ref: '#/components/schemas/UUID'
+      responses:
+        '204':
+          $ref: '#/components/responses/204'
+        '401':
+          $ref: '#/components/responses/401'
+        '403':
+          $ref: '#/components/responses/403'
+        '404':
+          $ref: '#/components/responses/404'
+        '409':
+          $ref: '#/components/responses/409'
+        '422':
+          $ref: '#/components/responses/422'
+        5XX:
+          $ref: '#/components/responses/5XX'
+components:
+  securitySchemes:
+    jwt:
+      type: http
+      scheme: bearer
+    cookie:
+      type: apiKey
+      in: cookie
+      name: rayman_auth
+  schemas:
+    UUID:
+      type: string
+      format: uuid
+    Timestamp:
+      type: string
+      format: date-time
+    AuditFields:
+      type: object
+      properties:
+        createdBy:
+          $ref: '#/components/schemas/UUID'
+          description: Actor ID that created the resource.
+        createdAt:
+          $ref: '#/components/schemas/Timestamp'
+        updatedBy:
+          $ref: '#/components/schemas/UUID'
+          description: Actor ID that last updated the resource.
+        updatedAt:
+          $ref: '#/components/schemas/Timestamp'
+    UserCore:
+      type: object
+      required:
+        - email
+        - name
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        surname1:
+          type: string
+          default: ''
+        surname2:
+          type: string
+          default: ''
+        info:
+          type: string
+          default: ''
+        disabled:
+          type: boolean
+          default: false
+        isOwner:
+          type: boolean
+        avatarAssetID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+          description: In PATCH requests, omitting this property keeps the current avatar unchanged. Sending `null` removes the avatar.
+          default: false
+    User:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            userID:
+              $ref: '#/components/schemas/UUID'
+            avatarAssetID:
+              oneOf:
+                - $ref: '#/components/schemas/UUID'
+                - type: 'null'
+        - $ref: '#/components/schemas/AuditFields'
+        - $ref: '#/components/schemas/UserCore'
+    Actor:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            actorID:
+              $ref: '#/components/schemas/UUID'
+            type:
+              type: string
+              enum:
+                - user
+                - user_deleted
+                - support
+                - service
+            displayName:
+              type: string
+            avatarAssetID:
+              oneOf:
+                - $ref: '#/components/schemas/UUID'
+                - type: 'null'
+            userID:
+              oneOf:
+                - $ref: '#/components/schemas/UUID'
+                - type: 'null'
+            user:
+              oneOf:
+                - $ref: '#/components/schemas/User'
+                - type: 'null'
+        - $ref: '#/components/schemas/AuditFields'
+    OrganizationSelection:
+      type: object
+      properties:
+        name:
+          type: string
+        slug:
+          type: string
+          description: External tenant identifier used by the API.
+        theme:
+          oneOf:
+            - type: string
+            - type: 'null'
+        logo:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+    UserUpdate:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        name:
+          type: string
+        surname1:
+          type: string
+        surname2:
+          type: string
+        info:
+          type: string
+        disabled:
+          type: boolean
+        isOwner:
+          type: boolean
+    PrincipalType:
+      type: string
+      enum:
+        - everyone
+        - user
+        - group
+    PermissionSubject:
+      type: object
+      required:
+        - principalType
+      properties:
+        principalType:
+          $ref: '#/components/schemas/PrincipalType'
+        principalID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+          description: Null only for `everyone`.
+    SystemPermissionScope:
+      type: string
+      enum:
+        - users
+        - permissions
+        - entity_variants
+    GrantAccess:
+      type: string
+      description: Permission grant access level used by grant definitions.
+      enum:
+        - read
+        - write
+    GrantEffect:
+      type: string
+      enum:
+        - allow
+        - deny
+    SystemPermissionGrantCore:
+      type: object
+      required:
+        - principalType
+        - scope
+        - access
+        - effect
+      properties:
+        principalType:
+          $ref: '#/components/schemas/PrincipalType'
+        principalID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+          description: Required for `user` and `group`. Must be null for `everyone`.
+        scope:
+          $ref: '#/components/schemas/SystemPermissionScope'
+        access:
+          $ref: '#/components/schemas/GrantAccess'
+        effect:
+          $ref: '#/components/schemas/GrantEffect'
+    SystemPermissionGrant:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            grantID:
+              $ref: '#/components/schemas/UUID'
+        - $ref: '#/components/schemas/AuditFields'
+        - $ref: '#/components/schemas/SystemPermissionGrantCore'
+    EntityGrantScope:
+      type: string
+      enum:
+        - self
+        - descendants
+        - self_and_descendants
+    EntityStatus:
+      type: string
+      enum:
+        - draft
+        - published
+        - archived
+    EntityPermissionGrantCore:
+      type: object
+      required:
+        - principalType
+        - access
+        - effect
+      properties:
+        principalType:
+          $ref: '#/components/schemas/PrincipalType'
+        principalID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+          description: Required for `user` and `group`. Must be null for `everyone`.
+        scope:
+          allOf:
+            - $ref: '#/components/schemas/EntityGrantScope'
+          default: self_and_descendants
+        access:
+          $ref: '#/components/schemas/GrantAccess'
+        effect:
+          $ref: '#/components/schemas/GrantEffect'
+        variantIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+          description: Applies to all variants when omitted or empty.
+        status:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityStatus'
+          description: Applies to all entity statuses when omitted or empty.
+    EntityPermissionGrant:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            grantID:
+              $ref: '#/components/schemas/UUID'
+            entityID:
+              oneOf:
+                - $ref: '#/components/schemas/UUID'
+                - type: 'null'
+              description: Nullable. `null` means a global root grant (tenant-wide anchor).
+        - $ref: '#/components/schemas/AuditFields'
+        - $ref: '#/components/schemas/EntityPermissionGrantCore'
+    PrincipalPermissionBundle:
+      type: object
+      required:
+        - subject
+        - systemGrants
+        - entityGrants
+      properties:
+        subject:
+          $ref: '#/components/schemas/PermissionSubject'
+        systemGrants:
+          type: array
+          items:
+            $ref: '#/components/schemas/SystemPermissionGrant'
+        entityGrants:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityPermissionGrant'
+    PermissionGroupCore:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    PermissionGroup:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            groupID:
+              $ref: '#/components/schemas/UUID'
+            memberUserIDs:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+            users:
+              type: array
+              description: Present when `expand=users` is requested.
+              items:
+                $ref: '#/components/schemas/User'
+            grants:
+              description: Present when `expand=grants` is requested.
+              $ref: '#/components/schemas/PrincipalPermissionBundle'
+        - $ref: '#/components/schemas/AuditFields'
+        - $ref: '#/components/schemas/PermissionGroupCore'
+    PermissionGroupUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+    AccessLevel:
+      type: string
+      description: Effective access level for resource visualization in client applications.
+      enum:
+        - read
+        - edit
+    EffectiveSystemPermission:
+      type: object
+      required:
+        - scope
+        - access
+        - sourcePrincipalType
+      properties:
+        scope:
+          $ref: '#/components/schemas/SystemPermissionScope'
+        access:
+          $ref: '#/components/schemas/AccessLevel'
+        sourcePrincipalType:
+          type: string
+          description: Principal type that produced the effective result (`user`, `group`, `everyone`, `none`).
+        sourcePrincipalID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        sourceGrantID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+    EffectiveGlobalEntityPermission:
+      type: object
+      required:
+        - variantID
+        - access
+        - canCreateChildren
+        - sourcePrincipalType
+      properties:
+        variantID:
+          $ref: '#/components/schemas/UUID'
+        access:
+          $ref: '#/components/schemas/AccessLevel'
+        canCreateChildren:
+          type: boolean
+          description: Whether the user can create children of this variant under global (`entityID = null`) permissions.
+        sourcePrincipalType:
+          type: string
+          description: Principal type that produced the effective result (`user`, `group`, `everyone`, `none`).
+        sourcePrincipalID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        sourceGrantID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+    EffectiveUserPermissions:
+      type: object
+      required:
+        - userID
+        - system
+        - globalEntity
+      properties:
+        userID:
+          $ref: '#/components/schemas/UUID'
+        system:
+          type: array
+          items:
+            $ref: '#/components/schemas/EffectiveSystemPermission'
+        globalEntity:
+          type: array
+          description: Computed global entity permissions (`entityID = null`) resolved for each variant.
+          items:
+            $ref: '#/components/schemas/EffectiveGlobalEntityPermission'
+    PrincipalGrant:
+      type: object
+      required:
+        - grantID
+        - grantType
+      properties:
+        grantID:
+          $ref: '#/components/schemas/UUID'
+        grantType:
+          type: string
+          enum:
+            - system
+            - entity
+        system:
+          oneOf:
+            - $ref: '#/components/schemas/SystemPermissionGrant'
+            - type: 'null'
+        entity:
+          oneOf:
+            - $ref: '#/components/schemas/EntityPermissionGrant'
+            - type: 'null'
+    PrincipalSystemGrantCreate:
+      type: object
+      required:
+        - scope
+        - access
+        - effect
+      properties:
+        scope:
+          $ref: '#/components/schemas/SystemPermissionScope'
+        access:
+          $ref: '#/components/schemas/GrantAccess'
+        effect:
+          $ref: '#/components/schemas/GrantEffect'
+    PrincipalEntityGrantCreate:
+      type: object
+      required:
+        - access
+        - effect
+      properties:
+        entityID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+          description: Nullable. `null` creates a global anchor grant.
+        scope:
+          allOf:
+            - $ref: '#/components/schemas/EntityGrantScope'
+          default: self_and_descendants
+        access:
+          $ref: '#/components/schemas/GrantAccess'
+        effect:
+          $ref: '#/components/schemas/GrantEffect'
+        variantIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+          description: Applies to all variants when omitted or empty.
+        status:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityStatus'
+          description: Applies to all entity statuses when omitted or empty.
+    PrincipalGrantWrite:
+      type: object
+      description: |
+        Unified principal grant payload.
+        Provide exactly one block: `system` or `entity`.
+      properties:
+        system:
+          $ref: '#/components/schemas/PrincipalSystemGrantCreate'
+        entity:
+          $ref: '#/components/schemas/PrincipalEntityGrantCreate'
+    EntityPrincipalGrants:
+      type: object
+      required:
+        - entityID
+        - grants
+      properties:
+        entityID:
+          $ref: '#/components/schemas/UUID'
+        grants:
+          type: array
+          items:
+            $ref: '#/components/schemas/EntityPermissionGrant'
+    PermissionExplainGroupRef:
+      type: object
+      required:
+        - groupID
+        - name
+      properties:
+        groupID:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+        description:
+          type: string
+    PermissionExplainEntityRef:
+      type: object
+      required:
+        - entityID
+        - name
+      properties:
+        entityID:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+        parentID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+    EntityType:
+      type: string
+      enum:
+        - generic
+        - procedure
+        - machine
+        - procedure_step
+        - machine_part
+    EntityVariantRef:
+      type: object
+      properties:
+        variantID:
+          $ref: '#/components/schemas/UUID'
+        access:
+          $ref: '#/components/schemas/AccessLevel'
+          description: Effective access level for the current user on this entity variant.
+        type:
+          $ref: '#/components/schemas/EntityType'
+        nameSingular:
+          type: string
+        namePlural:
+          type: string
+    PermissionExplainApplicableGrant:
+      type: object
+      required:
+        - grant
+        - source
+        - precedence
+        - applies
+        - decisive
+      properties:
+        grant:
+          $ref: '#/components/schemas/EntityPermissionGrant'
+        source:
+          type: string
+          enum:
+            - direct_user
+            - group
+            - everyone
+          description: How this grant is linked to the evaluated user.
+        precedence:
+          type: integer
+          description: Higher value means higher precedence in final conflict resolution.
+        applies:
+          type: boolean
+          description: Whether the grant matches the current entity context (anchor/descendants, variants and status).
+        decisive:
+          type: boolean
+          description: True only for the grant that determines the final effective access.
+        sourceGroup:
+          oneOf:
+            - $ref: '#/components/schemas/PermissionExplainGroupRef'
+            - type: 'null'
+          description: Present when `source=group`.
+        anchorEntity:
+          oneOf:
+            - $ref: '#/components/schemas/PermissionExplainEntityRef'
+            - type: 'null'
+          description: Expanded anchor entity where the grant is defined.
+        variantRefs:
+          type: array
+          description: Expanded variants for `grant.variantIDs` when available.
+          items:
+            $ref: '#/components/schemas/EntityVariantRef'
+    PermissionExplainEntityAccess:
+      type: object
+      required:
+        - entityID
+        - userID
+        - entityStatus
+        - effectiveAccess
+        - allowed
+        - evaluatedAt
+        - applicableGrants
+      properties:
+        entityID:
+          $ref: '#/components/schemas/UUID'
+        userID:
+          $ref: '#/components/schemas/UUID'
+        entityStatus:
+          $ref: '#/components/schemas/EntityStatus'
+          description: Current status of the entity used during evaluation.
+        effectiveAccess:
+          oneOf:
+            - $ref: '#/components/schemas/AccessLevel'
+            - type: 'null'
+          description: Effective access currently resolved for this principal on this entity.
+        allowed:
+          type: boolean
+        evaluatedAt:
+          $ref: '#/components/schemas/Timestamp'
+        applicableGrants:
+          type: array
+          description: |
+            Grants affecting this user for the resource context, sorted by precedence (highest first).
+            Includes direct-user, group and everyone grants.
+          items:
+            $ref: '#/components/schemas/PermissionExplainApplicableGrant'
+    EntityVariant:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            variantID:
+              $ref: '#/components/schemas/UUID'
+            access:
+              $ref: '#/components/schemas/AccessLevel'
+              description: Effective access level for the current user on this entity variant.
+            tags:
+              type: array
+              description: Present when `expand=tags` is requested.
+              items:
+                $ref: '#/components/schemas/Tag'
+            signs:
+              type: array
+              description: Present when `expand=signs` is requested.
+              items:
+                $ref: '#/components/schemas/Sign'
+            childVariants:
+              type: array
+              description: Present when `expand=children` is requested.
+              items:
+                $ref: '#/components/schemas/EntityVariantRef'
+        - $ref: '#/components/schemas/AuditFields'
+        - $ref: '#/components/schemas/EntityVariantCore'
+    TagCore:
+      type: object
+      required:
+        - variantID
+        - tag
+      properties:
+        variantID:
+          $ref: '#/components/schemas/UUID'
+        tag:
+          type: string
+    Tag:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            tagID:
+              $ref: '#/components/schemas/UUID'
+            variant:
+              $ref: '#/components/schemas/EntityVariant'
+        - $ref: '#/components/schemas/TagCore'
+    SignCore:
+      type: object
+      required:
+        - variantID
+        - name
+        - color
+        - type
+        - iconText
+      properties:
+        variantID:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+        color:
+          type: string
+          minLength: 1
+          maxLength: 24
+        iconID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        type:
+          type: string
+          enum:
+            - icon
+            - verification
+            - warning
+            - prohibition
+        iconText:
+          type: string
+    Sign:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            signID:
+              $ref: '#/components/schemas/UUID'
+        - $ref: '#/components/schemas/AuditFields'
+        - $ref: '#/components/schemas/SignCore'
+    MetadataFieldType:
+      type: string
+      description: Allowed metadata field types.
+      enum:
+        - string
+        - number
+        - boolean
+        - enum
+    MetadataField:
+      type: object
+      required:
+        - id
+        - key
+        - label
+        - type
+        - value
+      properties:
+        id:
+          type: string
+          description: Unique field identifier.
+        key:
+          type: string
+          description: Internal key used by clients.
+        label:
+          type: string
+          description: Display name for UI rendering.
+        type:
+          $ref: '#/components/schemas/MetadataFieldType'
+        value:
+          oneOf:
+            - type: string
+            - type: number
+            - type: boolean
+          description: Field value. Use string for `enum` options.
+    Metadata:
+      type: array
+      description: |
+        Metadata payload used by both `metadataTemplate` and `metadata`.
+        Each item must follow `MetadataField` structure.
+      items:
+        $ref: '#/components/schemas/MetadataField'
+    EntityVariantCore:
+      type: object
+      required:
+        - type
+        - nameSingular
+        - namePlural
+      properties:
+        type:
+          $ref: '#/components/schemas/EntityType'
+        inheritedPermissionsOnly:
+          type: boolean
+          default: false
+        disabled:
+          type: boolean
+          default: false
+        nameSingular:
+          type: string
+        namePlural:
+          type: string
+        icon:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+          description: In PATCH requests, omitting this property keeps the current icon unchanged. Sending `null` removes the icon.
+        metadataTemplate:
+          $ref: '#/components/schemas/Metadata'
+        childVariantIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+          description: Allowed child variants for entities using this variant as parent.
+    EntityVariantUpdate:
+      type: object
+      properties:
+        inheritedPermissionsOnly:
+          type: boolean
+        disabled:
+          type: boolean
+        nameSingular:
+          type: string
+        namePlural:
+          type: string
+        icon:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        metadataTemplate:
+          $ref: '#/components/schemas/Metadata'
+    VariantSignCreate:
+      type: object
+      required:
+        - name
+        - color
+        - type
+        - iconText
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+          minLength: 1
+          maxLength: 24
+        iconID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        type:
+          type: string
+          enum:
+            - icon
+            - verification
+            - warning
+            - prohibition
+        iconText:
+          type: string
+    SignUpdate:
+      type: object
+      properties:
+        name:
+          type: string
+        color:
+          type: string
+          minLength: 1
+          maxLength: 24
+        iconID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        type:
+          type: string
+          enum:
+            - icon
+            - verification
+            - warning
+            - prohibition
+        iconText:
+          type: string
+    VariantTagCreate:
+      type: object
+      required:
+        - tag
+      properties:
+        tag:
+          type: string
+    TagUpdate:
+      type: object
+      properties:
+        tag:
+          type: string
+    EntityRef:
+      type: object
+      properties:
+        entityID:
+          $ref: '#/components/schemas/UUID'
+        variantID:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+        access:
+          $ref: '#/components/schemas/AccessLevel'
+          description: Effective access level for the current user on this entity.
+    AssetCore:
+      type: object
+      required:
+        - name
+        - mimetype
+        - bytes
+        - assetType
+      properties:
+        name:
+          type: string
+        mimetype:
+          type: string
+        bytes:
+          type: integer
+          minimum: 0
+        assetType:
+          type: string
+          enum:
+            - image
+            - video
+            - scene_3d
+            - model_3d
+            - document
+            - other
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+    Asset:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            assetID:
+              $ref: '#/components/schemas/UUID'
+            path:
+              type: string
+        - $ref: '#/components/schemas/AuditFields'
+        - $ref: '#/components/schemas/AssetCore'
+    EntityAncestorRef:
+      type: object
+      properties:
+        entityID:
+          $ref: '#/components/schemas/UUID'
+        name:
+          type: string
+    Entity3dMapping:
+      type: object
+      properties:
+        mainAssetID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        parentAssetID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        parentAssetPath:
+          oneOf:
+            - type: string
+            - type: 'null'
+    FeaturedPanel:
+      type: object
+      additionalProperties: false
+      required:
+        - text
+        - color
+      properties:
+        signalID:
+          oneOf:
+            - type: string
+              minLength: 1
+            - type: 'null'
+        text:
+          type: string
+          minLength: 1
+        color:
+          type: string
+          minLength: 1
+    EntityCore:
+      type: object
+      required:
+        - variantID
+        - name
+      properties:
+        variantID:
+          $ref: '#/components/schemas/UUID'
+        parentID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        name:
+          type: string
+        description:
+          type: string
+        pictureAssetID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+          description: In PATCH requests, omitting this property keeps the current picture unchanged. Sending `null` removes the picture.
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        featuredPanel:
+          oneOf:
+            - $ref: '#/components/schemas/FeaturedPanel'
+            - type: 'null'
+        status:
+          $ref: '#/components/schemas/EntityStatus'
+        tagIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        signIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        assetIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        relatedEntityIDs:
+          type: array
+          description: Soft symmetric relations visible from either side of the stored pair.
+          items:
+            $ref: '#/components/schemas/UUID'
+        entity3dMapping:
+          $ref: '#/components/schemas/Entity3dMapping'
+    Entity:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            entityID:
+              $ref: '#/components/schemas/UUID'
+            access:
+              $ref: '#/components/schemas/AccessLevel'
+              description: Effective access level for the current user on this entity.
+            createVariantIDs:
+              type: array
+              description: Child variants the current user can create inside this entity.
+              items:
+                $ref: '#/components/schemas/UUID'
+            variant:
+              $ref: '#/components/schemas/EntityVariant'
+            parent:
+              oneOf:
+                - $ref: '#/components/schemas/EntityRef'
+                - type: 'null'
+            tags:
+              type: array
+              description: Present when `expand=tags` is requested.
+              items:
+                $ref: '#/components/schemas/Tag'
+            signs:
+              type: array
+              description: Present when `expand=signs` is requested.
+              items:
+                $ref: '#/components/schemas/Sign'
+            assets:
+              type: array
+              description: Present when `expand=assets` is requested.
+              items:
+                $ref: '#/components/schemas/Asset'
+            relatedEntities:
+              type: array
+              description: Present when `expand=relations` is requested.
+              items:
+                $ref: '#/components/schemas/EntityRef'
+            childCount:
+              type: integer
+              minimum: 0
+              description: Number of direct children (`parentID = this entityID`).
+            ancestors:
+              type: array
+              description: Present when `expand=ancestors` is requested. Ordered from root to direct parent.
+              items:
+                $ref: '#/components/schemas/EntityAncestorRef'
+            entity3dMapping:
+              oneOf:
+                - $ref: '#/components/schemas/Entity3dMapping'
+                - type: 'null'
+        - $ref: '#/components/schemas/AuditFields'
+        - $ref: '#/components/schemas/EntityCore'
+    EntitySearchResponse:
+      type: object
+      required:
+        - items
+        - total
+        - limit
+        - offset
+      properties:
+        items:
+          type: array
+          items:
+            $ref: '#/components/schemas/Entity'
+        total:
+          type: integer
+          minimum: 0
+        limit:
+          type: integer
+          minimum: 1
+        offset:
+          type: integer
+          minimum: 0
+    EntityUpdate:
+      type: object
+      properties:
+        parentID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+          description: In PATCH requests, omitting this property keeps the current parent unchanged. Sending `null` removes the parent relation. Sending a UUID reassigns the parent.
+        name:
+          type: string
+        description:
+          type: string
+        pictureAssetID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        metadata:
+          $ref: '#/components/schemas/Metadata'
+        featuredPanel:
+          oneOf:
+            - $ref: '#/components/schemas/FeaturedPanel'
+            - type: 'null'
+          description: In PATCH requests, omitting this property keeps the current panel unchanged. Sending `null` removes the panel.
+        status:
+          $ref: '#/components/schemas/EntityStatus'
+        tagIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        signIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        assetIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        relatedEntityIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        entity3dMapping:
+          $ref: '#/components/schemas/Entity3dMapping'
+    BulkEntityCreateItem:
+      allOf:
+        - type: object
+          required:
+            - entityID
+          properties:
+            entityID:
+              $ref: '#/components/schemas/UUID'
+            entity3dMapping:
+              $ref: '#/components/schemas/Entity3dMapping'
+        - $ref: '#/components/schemas/EntityCore'
+    BulkEntityCreateRequest:
+      type: object
+      required:
+        - entities
+      properties:
+        entities:
+          type: array
+          minItems: 1
+          items:
+            $ref: '#/components/schemas/BulkEntityCreateItem'
+    BulkDuplicateRootMapping:
+      type: object
+      required:
+        - sourceEntityID
+        - entityID
+      properties:
+        sourceEntityID:
+          $ref: '#/components/schemas/UUID'
+        entityID:
+          $ref: '#/components/schemas/UUID'
+    BulkOperationResult:
+      type: object
+      required:
+        - operationID
+        - result
+        - matchedCount
+        - changedCount
+        - unchangedCount
+        - entityIDs
+      properties:
+        operationID:
+          $ref: '#/components/schemas/UUID'
+        result:
+          type: string
+          enum:
+            - completed
+        matchedCount:
+          type: integer
+          minimum: 0
+        changedCount:
+          type: integer
+          minimum: 0
+        unchangedCount:
+          type: integer
+          minimum: 0
+        entityIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        parentID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+        requestedRootCount:
+          type: integer
+          minimum: 0
+        rootMappings:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkDuplicateRootMapping'
+    BulkIssue:
+      type: object
+      required:
+        - code
+        - message
+      properties:
+        code:
+          type: string
+          description: Stable, language-independent code intended as the client localization key.
+        message:
+          type: string
+          description: English fallback message. Clients may localize it using `code` and `params`.
+        path:
+          type: string
+          description: JSON Pointer identifying the invalid request member.
+        entityID:
+          $ref: '#/components/schemas/UUID'
+        params:
+          type: object
+          additionalProperties: true
+          description: Interpolation parameters for a localized client message.
+    BulkPreviewResult:
+      type: object
+      required:
+        - previewID
+        - acceptable
+        - matchedCount
+        - changedCount
+        - unchangedCount
+        - issueCount
+        - issuesTruncated
+        - issues
+        - warnings
+      properties:
+        previewID:
+          $ref: '#/components/schemas/UUID'
+        acceptable:
+          type: boolean
+        matchedCount:
+          type: integer
+          minimum: 0
+        changedCount:
+          type: integer
+          minimum: 0
+        unchangedCount:
+          type: integer
+          minimum: 0
+        issueCount:
+          type: integer
+          minimum: 0
+        issuesTruncated:
+          type: boolean
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkIssue'
+        warnings:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkIssue'
+    BulkError:
+      type: object
+      required:
+        - error
+        - message
+        - operationID
+        - rolledBack
+        - issueCount
+        - issuesTruncated
+        - issues
+      properties:
+        error:
+          type: string
+        message:
+          type: string
+          description: English fallback summary.
+        operationID:
+          $ref: '#/components/schemas/UUID'
+        rolledBack:
+          type: boolean
+          const: true
+        issueCount:
+          type: integer
+          minimum: 1
+        issuesTruncated:
+          type: boolean
+          description: Indicates whether the server omitted any issues from the response. The current implementation returns every issue and therefore reports false.
+        issues:
+          type: array
+          items:
+            $ref: '#/components/schemas/BulkIssue'
+    EntityBulkExclusion:
+      type: object
+      properties:
+        entityIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        subtreeRootIDs:
+          type: array
+          description: Roots of branches to exclude. Each excluded subtree includes its root.
+          items:
+            $ref: '#/components/schemas/UUID'
+    EntityBulkTarget:
+      type: object
+      description: Use `variantID` or a non-empty union of `entityIDs` and `subtreeRootIDs`. Exclusions may be used with either form and always win.
+      properties:
+        entityIDs:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        subtreeRootIDs:
+          type: array
+          description: Every subtree includes its root; a leaf is therefore a valid subtree root.
+          items:
+            $ref: '#/components/schemas/UUID'
+        variantID:
+          $ref: '#/components/schemas/UUID'
+        exclude:
+          $ref: '#/components/schemas/EntityBulkExclusion'
+    BulkLinkChanges:
+      type: object
+      properties:
+        add:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+        remove:
+          type: array
+          items:
+            $ref: '#/components/schemas/UUID'
+    BulkEntityChanges:
+      type: object
+      allOf:
+        - $ref: '#/components/schemas/EntityUpdate'
+        - type: object
+          properties:
+            tags:
+              $ref: '#/components/schemas/BulkLinkChanges'
+            signs:
+              $ref: '#/components/schemas/BulkLinkChanges'
+            relations:
+              $ref: '#/components/schemas/BulkLinkChanges'
+    BulkEntityOperation:
+      type: object
+      required:
+        - target
+        - changes
+      properties:
+        target:
+          $ref: '#/components/schemas/EntityBulkTarget'
+        changes:
+          $ref: '#/components/schemas/BulkEntityChanges'
+    BulkEntityOperationsRequest:
+      type: object
+      required:
+        - operations
+      properties:
+        operations:
+          type: array
+          minItems: 1
+          description: Targets are resolved from the initial hierarchy and changes are applied in array order.
+          items:
+            $ref: '#/components/schemas/BulkEntityOperation'
+    BulkDeleteRequest:
+      type: object
+      required:
+        - target
+      properties:
+        target:
+          $ref: '#/components/schemas/EntityBulkTarget'
+    BulkDuplicateRequest:
+      type: object
+      required:
+        - subtreeRootIDs
+      properties:
+        subtreeRootIDs:
+          type: array
+          minItems: 1
+          description: Roots of the independent subtrees to duplicate in full. The selection cannot contain both an ancestor and one of its descendants.
+          items:
+            $ref: '#/components/schemas/UUID'
+    ProcedureStepSpecializedCore:
+      type: object
+      properties:
+        order:
+          type: integer
+          minimum: 0
+          description: Assigned automatically on create as the current step count plus one, and compacted after deletions.
+        animation:
+          type: string
+    ProcedureStep:
+      allOf:
+        - $ref: '#/components/schemas/Entity'
+        - $ref: '#/components/schemas/ProcedureStepSpecializedCore'
+    ProcedureSpecializedCore:
+      type: object
+      properties:
+        scene3dAssetID:
+          oneOf:
+            - $ref: '#/components/schemas/UUID'
+            - type: 'null'
+    Procedure:
+      allOf:
+        - $ref: '#/components/schemas/Entity'
+        - type: object
+          properties:
+            stepCount:
+              type: integer
+              minimum: 0
+            steps:
+              type: array
+              description: Present when `expand=steps` is requested.
+              items:
+                $ref: '#/components/schemas/ProcedureStep'
+        - $ref: '#/components/schemas/ProcedureSpecializedCore'
+    ProcedureCreate:
+      allOf:
+        - $ref: '#/components/schemas/EntityCore'
+        - $ref: '#/components/schemas/ProcedureSpecializedCore'
+    ProcedureUpdate:
+      allOf:
+        - $ref: '#/components/schemas/EntityUpdate'
+        - type: object
+          properties:
+            scene3dAssetID:
+              oneOf:
+                - $ref: '#/components/schemas/UUID'
+                - type: 'null'
+              description: In PATCH requests, omitting this property keeps the current 3D scene unchanged. Sending `null` removes the scene.
+    ProcedureStepCreate:
+      allOf:
+        - $ref: '#/components/schemas/EntityCore'
+        - $ref: '#/components/schemas/ProcedureStepSpecializedCore'
+        - type: object
+          required:
+            - procedureID
+          properties:
+            procedureID:
+              $ref: '#/components/schemas/UUID'
+            order:
+              type: integer
+              minimum: 0
+              description: Ignored on create. The API assigns the next sequential order automatically.
+    ProcedureStepUpdate:
+      allOf:
+        - $ref: '#/components/schemas/EntityUpdate'
+        - type: object
+          properties:
+            order:
+              type: integer
+              minimum: 0
+            animation:
+              type: string
+  responses:
+    '204':
+      description: Operation completed successfully.
+    '400':
+      description: Bad Request.
+    '401':
+      description: Authorization information is missing or invalid.
+    '403':
+      description: Forbidden.
+    '404':
+      description: Resource not found.
+    '409':
+      description: Conflict.
+    '422':
+      description: Request was syntactically valid but semantically invalid.
+    5XX:
+      description: Unexpected internal error.
+    components-bulk-success:
+      description: Operation completed, or preview evaluated.
+      content:
+        application/json:
+          schema:
+            oneOf:
+              - $ref: '#/components/schemas/BulkOperationResult'
+              - $ref: '#/components/schemas/BulkPreviewResult'
+    components-bulk-error:
+      description: Atomic bulk operation rejected; no requested mutation was partially applied.
+      content:
+        application/json:
+          schema:
+            $ref: '#/components/schemas/BulkError'
+  parameters:
+    components-idempotency-key:
+      name: Idempotency-Key
+      in: header
+      required: false
+      description: Optional and recommended for safe retries. Reuse it only with the exact same request. The current in-memory implementation is lost on restart and is not shared across service instances; a shared persistent store is the recommended future improvement.
+      schema:
+        type: string
+        maxLength: 200
+    components-preview:
+      name: preview
+      in: query
+      required: false
+      description: When true, resolves and validates the operation without making changes. A successfully evaluated but unacceptable preview still returns HTTP 200 with `acceptable=false`.
+      schema:
+        type: boolean
+        default: false
