@@ -1,0 +1,126 @@
+# Changelog
+
+All notable changes to the Rayman API are documented in this file.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses draft versions for the OpenAPI definition.
+
+## [Unreleased]
+
+## [1.0.0-draft.10]
+
+### Added
+
+- Added atomic bulk create with client-assigned entity UUIDs.
+- Added one ordered bulk PATCH for explicit IDs, subtrees and variant-wide targets, including status, links and explicit-ID reparenting.
+- Added subtree exclusions and variant-aware smart tag/sign assignment.
+- Added subtree-aware bulk delete under `/entities/bulk/delete`.
+- Added atomic duplication of multiple independent subtrees.
+- Added optional preview and in-memory idempotency support.
+- Added structured, localizable bulk errors with English fallback messages.
+
+## [1.0.0-draft.9]
+
+### Added
+
+- Added the optional `status` filter to `GET /entities/search`.
+- Allowed `status` to be used as the sole search criterion.
+
+### Changed
+
+- Clarified that the `status` filter uses the same `EntityStatus` semantics as `GET /entities` and combines with other search filters using AND.
+
+## [1.0.0-draft.8]
+
+### Added
+
+- Added `featuredPanel` to entity-shaped contracts (`Entity`, `Procedure`, `ProcedureStep`) for prominent UI panels.
+
+### Changed
+
+- Defined `featuredPanel` update semantics: omitted keeps the current value, explicit `null` clears it.
+- Updated the sign color contract to support nominal tokens and legacy hex values (`string`, max length 24).
+
+## [1.0.0-draft.7]
+
+### Added
+
+- Added `user_deleted` to the actor type.
+- Documented `avatarAssetID` in `UserUpdate` with PATCH null/omit semantics.
+
+### Changed
+
+- Defined user deletion behavior to anonymize linked actors (`type=user_deleted`, `displayName='Deleted User'`) and clear actor/user avatar links.
+
+## [1.0.0-draft.6]
+
+### Added
+
+- Added `DELETE /users/{userID}` to the core API.
+
+### Changed
+
+- Updated authentication success payloads to return `actor` instead of `user`.
+
+## [1.0.0-draft.5]
+
+### Added
+
+- Added `DELETE /entity-variants/{variantID}`.
+
+### Changed
+
+- Defined delete behavior: deletion is blocked with a conflict when entities still reference the variant.
+
+## [1.0.0-draft.4]
+
+### Added
+
+- Added `POST /entities/{entityID}/duplicate` to clone an entity subtree.
+
+### Changed
+
+- Moved `status` from the `Procedure` specialization to the shared `Entity` contract.
+- Updated `GET /procedures?status=...` to reuse the shared `EntityStatus` enum.
+- Documented clone semantics: composed records and linked assets are duplicated, with independent asset references.
+
+## [1.0.0-draft.3]
+
+### Added
+
+- Added `expand=ancestors` for `entities`, `procedures` and `procedure steps`.
+- Added an `ancestors` payload to entity-shaped responses with lightweight breadcrumb data (`entityID`, `name`) ordered from root to parent.
+- Added `childCount` to entity-shaped responses (`Entity`, `Procedure`, `ProcedureStep`) with a direct-children count.
+- Added `GET /sign-icons` to list available sign icon IDs.
+
+### Changed
+
+- Updated `GET /entities` to accept `parentID=null` (literal query value) as a root-only filter.
+
+## [1.0.0-draft.2]
+
+### Added
+
+- Added `entity_relations` to the public 1.x contract as soft entity-to-entity references.
+- Added `variant_relationships` to the public 1.x contract as allowed child-variant rules for `parentID`.
+- Added `/entities/{entityID}/relations` endpoints.
+- Added `/entity-variants/{variantID}/children` endpoints.
+- Added `relatedEntityIDs` / `relatedEntities` to `Entity`.
+- Added `childVariantIDs` / `childVariants` to `EntityVariant`.
+- Added `DELETE /entities/{entityID}/3d-mapping` to remove only the 3D mapping row from an entity.
+- Added CRUD convenience endpoints for `entity_3d_mapping` plus reverse lookup by `assetID` and optional `parentAssetPath`.
+
+### Changed
+
+- Clarified that assigning `parentID` requires an allowed `parent variant -> child variant` relationship.
+- Clarified that `entity_relations` are read bidirectionally, regardless of which side stored the row.
+
+## [1.0.0-draft.1]
+
+### Added
+
+- Created the initial 1.x draft from the new entity-based schema.
+- Introduced generic resources for `entity-variants`, `entities`, `assets` and `permission-groups`.
+- Reframed procedures as specialized entities with `procedures` and `procedures/{procedureID}/steps`.
+- Reframed legacy templates as `metadataTemplate` on variants.
+- Reframed entity custom data as `metadata`.
+- Standardized `metadata` and `metadataTemplate` as a shared metadata payload.
