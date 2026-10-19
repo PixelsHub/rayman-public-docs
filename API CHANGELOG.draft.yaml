@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.11]
+
+### Changed
+
+- Login and password reset identifier lookups are now case-insensitive, including existing mixed-case identifiers.
+- New and updated authentication identifiers are stored in lowercase, and duplicate email checks ignore case. Passwords remain case-sensitive.
+
 ## [1.0.0-draft.10]
 
 ### Added
