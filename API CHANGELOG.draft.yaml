@@ -6,6 +6,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.12]
+
+### Deprecated
+
+- Deprecated both reads and the PUT/DELETE writes of the legacy 3D mapping endpoints, along with the `Entity3dMapping` schema. They remain temporary development compatibility contracts and will be removed when the new 3D system is complete.
+- Legacy mapping writes, including mappings embedded in entity and bulk requests, will be disabled when the new Model3D database structure is implemented, even if replacement model registration is not yet available. This deprecation does not disable the current implementation by itself.
+
 ## [1.0.0-draft.11]
 
 ### Changed
