@@ -6,6 +6,31 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.15]
+
+### Fixed
+
+- Entity/procedure creation and duplication commit initial creator permissions atomically with the content. Authorized creators receive an immediately readable response without waiting for asynchronous materialization.
+- Tenant permission rebuilds coordinate with content mutations before reading their snapshots, preserving permissions for newly committed entities across version publication. Permission reads use a consistent version snapshot.
+
+### Changed
+
+- Permission coordination has bounded lock waits and transaction duration. A timeout before commit returns 503 with error permission_operation_timeout and rolls back the content and initial permissions.
+
+## [1.0.0-draft.14]
+
+### Changed
+
+- Metadata responses normalize stored Rayman 0.5 formats to arrays of MetadataField objects without rewriting the database. Missing field IDs are deterministic.
+- POST/PATCH metadata and multipart asset metadata accept only the documented array format; supplied nulls, legacy objects and malformed fields return 422. Omitted metadata remains optional.
+- Bulk issues omit path, entityID and params when they have no value.
+
+## [1.0.0-draft.13]
+
+### Changed
+
+- Asset downloads document arbitrary media types using `*/*` for successful full and partial responses. The response Content-Type describes the original asset; the contract does not enumerate or restrict file media types.
+
 ## [1.0.0-draft.12]
 
 ### Deprecated
