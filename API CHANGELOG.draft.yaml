@@ -6,16 +6,35 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.18]
+
+### Changed
+
+- New steps receive the largest existing step order plus one, starting at 1. Deleting a step preserves other orders; gaps are allowed. Step counts exclude other child entities.
+
+## [1.0.0-draft.17]
+
+### Fixed
+
+- Grant mutations require permission administration; tag/sign mutations require variant administration. Procedure/step deletion requires write access and rejects IDs of another resource type or steps belonging to another procedure.
+- Self profile edits preserve email changes while disabled/isOwner require users/write. Queries of another user's effective permissions no longer inherit the caller's global role.
+- After a user's suspension takes effect, login, organization selection and refresh reject that organization. Existing sessions remain usable until expiration. Reactivation restores login with the existing password.
+
+## [1.0.0-draft.16]
+
+### Fixed
+
+- JWTs require numeric expiration and HS256. Optional not-before is enforced. Valid bearer and cookie sessions remain compatible.
+
 ## [1.0.0-draft.15]
 
 ### Fixed
 
-- Entity/procedure creation and duplication commit initial creator permissions atomically with the content. Authorized creators receive an immediately readable response without waiting for asynchronous materialization.
-- Tenant permission rebuilds coordinate with content mutations before reading their snapshots, preserving permissions for newly committed entities across version publication. Permission reads use a consistent version snapshot.
+- Authorized creators can read newly created or duplicated entities and procedures immediately, without transient 403 responses.
 
 ### Changed
 
-- Permission coordination has bounded lock waits and transaction duration. A timeout before commit returns 503 with error permission_operation_timeout and rolls back the content and initial permissions.
+- Temporary contention preventing an operation returns 503 with error permission_operation_timeout and leaves its changes unapplied.
 
 ## [1.0.0-draft.14]
 
