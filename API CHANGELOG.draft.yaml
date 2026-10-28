@@ -10,7 +10,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- New steps receive the largest existing step order plus one, starting at 1. Deleting a step preserves other orders; gaps are allowed. Step counts exclude other child entities.
+- Step deletion preserves the remaining order values; gaps are allowed. Step counts include procedure steps only.
 
 ## [1.0.0-draft.17]
 
@@ -28,10 +28,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [1.0.0-draft.15]
 
-### Fixed
-
-- Authorized creators can read newly created or duplicated entities and procedures immediately, without transient 403 responses.
-
 ### Changed
 
 - Temporary contention preventing an operation returns 503 with error permission_operation_timeout and leaves its changes unapplied.
@@ -40,7 +36,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Changed
 
-- Metadata responses normalize stored Rayman 0.5 formats to arrays of MetadataField objects without rewriting the database. Missing field IDs are deterministic.
+- Metadata responses use arrays of MetadataField objects with stable field IDs.
 - POST/PATCH metadata and multipart asset metadata accept only the documented array format; supplied nulls, legacy objects and malformed fields return 422. Omitted metadata remains optional.
 - Bulk issues omit path, entityID and params when they have no value.
 
@@ -55,7 +51,6 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 ### Deprecated
 
 - Deprecated both reads and the PUT/DELETE writes of the legacy 3D mapping endpoints, along with the `Entity3dMapping` schema. They remain temporary development compatibility contracts and will be removed when the new 3D system is complete.
-- Legacy mapping writes, including mappings embedded in entity and bulk requests, will be disabled when the new Model3D database structure is implemented, even if replacement model registration is not yet available. This deprecation does not disable the current implementation by itself.
 
 ## [1.0.0-draft.11]
 
@@ -73,7 +68,7 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 - Added subtree exclusions and variant-aware smart tag/sign assignment.
 - Added subtree-aware bulk delete under `/entities/bulk/delete`.
 - Added atomic duplication of multiple independent subtrees.
-- Added optional preview and in-memory idempotency support.
+- Added optional preview and idempotency support.
 - Added structured, localizable bulk errors with English fallback messages.
 
 ## [1.0.0-draft.9]
@@ -158,19 +153,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ### Added
 
-- Added `entity_relations` to the public 1.x contract as soft entity-to-entity references.
-- Added `variant_relationships` to the public 1.x contract as allowed child-variant rules for `parentID`.
+- Added entity relations and allowed child-variant relationships for `parentID`.
 - Added `/entities/{entityID}/relations` endpoints.
 - Added `/entity-variants/{variantID}/children` endpoints.
 - Added `relatedEntityIDs` / `relatedEntities` to `Entity`.
 - Added `childVariantIDs` / `childVariants` to `EntityVariant`.
-- Added `DELETE /entities/{entityID}/3d-mapping` to remove only the 3D mapping row from an entity.
-- Added CRUD convenience endpoints for `entity_3d_mapping` plus reverse lookup by `assetID` and optional `parentAssetPath`.
+- Added `DELETE /entities/{entityID}/3d-mapping` to remove the 3D mapping from an entity.
+- Added 3D mapping endpoints plus reverse lookup by `assetID` and optional `parentAssetPath`.
 
 ### Changed
 
 - Clarified that assigning `parentID` requires an allowed `parent variant -> child variant` relationship.
-- Clarified that `entity_relations` are read bidirectionally, regardless of which side stored the row.
+- Entity relations can be queried from either related entity.
 
 ## [1.0.0-draft.1]
 
