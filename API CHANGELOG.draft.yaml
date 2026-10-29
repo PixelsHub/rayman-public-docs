@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.19]
+
+### Fixed
+
+- Invalid enum names and numeric enum strings in entity, procedure, asset and grant inputs return 422 instead of using a default value or ignoring the filter. Omitted optional values keep their existing defaults.
+
 ## [1.0.0-draft.18]
 
 ### Changed
