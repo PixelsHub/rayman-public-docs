@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.20]
+
+### Added
+
+- Model3D list, detail, create, update, link, unlink, direct forks and node reference-map operations, including optional model/node pictures and structured validation errors.
+- Entity model3dLinkCount and optional expand=model3dLinks references; computed origin flags on legacy 3D mappings.
+
+### Changed
+
+- Legacy 3D mapping writes are rejected; non-null entity3dMapping is no longer accepted in entity writes. Null remains equivalent to omission.
+- Duplication returns 409 while the selected entities retain legacy 3D associations.
+- Asset reads require access through their uses or another applicable asset access rule.
+
+
 ## [1.0.0-draft.19]
 
 ### Fixed
