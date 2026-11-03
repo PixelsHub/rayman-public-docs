@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.21]
+
+### Changed
+
+- GET /assets returns an items/total/limit/offset page instead of a plain array. Default limit is 50; limit=-1 returns all matching results from offset. Invalid pagination returns 400.
+
 ## [1.0.0-draft.20]
 
 ### Added
