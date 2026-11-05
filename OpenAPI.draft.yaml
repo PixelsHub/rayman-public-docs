@@ -9,7 +9,7 @@ info:
   license:
     name: All Rights Reserved
     url: https://choosealicense.com/no-permission/
-  version: 1.0.0-draft.21
+  version: 1.0.0-draft.22
 servers:
   - url: https://rayman.pixels-hub.com/dev/api
     description: Development server
@@ -2073,6 +2073,28 @@ paths:
           description: 'CSV list of expansions. Supported values: assets, relations, signs, tags, parent, variant, ancestors, model3dLinks'
           schema:
             type: string
+        - name: view
+          in: query
+          required: false
+          description: Response representation. Summary omits description, metadata, featuredPanel, signIDs, assetIDs and relatedEntityIDs. Expansions are independent of the selected view.
+          schema:
+            type: string
+            enum:
+              - summary
+              - detail
+            default: summary
+        - name: entityIDs
+          in: query
+          required: false
+          description: CSV list of entity UUIDs. Selects only these entities, without traversing the hierarchy. Combines with other filters using AND. Duplicates are ignored; missing or unreadable entities are omitted. An empty list or invalid UUID returns 400.
+          schema:
+            type: array
+            items:
+              type: string
+              format: uuid
+            minItems: 1
+          style: form
+          explode: false
       responses:
         '200':
           description: Operation completed successfully
@@ -2081,7 +2103,9 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Entity'
+                  anyOf:
+                    - $ref: '#/components/schemas/EntitySummaryWithLegacyMapping'
+                    - $ref: '#/components/schemas/Entity'
         '400':
           $ref: '#/components/responses/400'
         '401':
@@ -2176,6 +2200,16 @@ paths:
           description: 'CSV list of expansions. Supported values: assets, relations, signs, tags, parent, variant, ancestors, model3dLinks'
           schema:
             type: string
+        - name: view
+          in: query
+          required: false
+          description: Response representation. Summary omits description, metadata, featuredPanel, signIDs, assetIDs and relatedEntityIDs. Expansions are independent of the selected view.
+          schema:
+            type: string
+            enum:
+              - summary
+              - detail
+            default: summary
       responses:
         '200':
           description: Search completed successfully
@@ -3316,6 +3350,16 @@ paths:
           description: 'CSV list of expansions. Supported values: assets, relations, signs, tags, parent, variant, steps, ancestors, model3dLinks'
           schema:
             type: string
+        - name: view
+          in: query
+          required: false
+          description: Response representation. Summary omits description, metadata, featuredPanel, signIDs, assetIDs and relatedEntityIDs. Expansions are independent of the selected view.
+          schema:
+            type: string
+            enum:
+              - summary
+              - detail
+            default: summary
       responses:
         '200':
           description: Operation completed successfully
@@ -3324,7 +3368,11 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/Procedure'
+                  anyOf:
+                    - $ref: '#/components/schemas/ProcedureSummary'
+                    - $ref: '#/components/schemas/Procedure'
+        '400':
+          $ref: '#/components/responses/400'
         '401':
           $ref: '#/components/responses/401'
         '403':
@@ -3469,6 +3517,16 @@ paths:
           description: 'CSV list of expansions. Supported values: assets, relations, signs, ancestors, model3dLinks'
           schema:
             type: string
+        - name: view
+          in: query
+          required: false
+          description: Response representation. Summary omits description, metadata, featuredPanel, signIDs, assetIDs and relatedEntityIDs. Expansions are independent of the selected view. Summary also omits animation.
+          schema:
+            type: string
+            enum:
+              - summary
+              - detail
+            default: summary
       responses:
         '200':
           description: Operation completed successfully
@@ -3477,7 +3535,11 @@ paths:
               schema:
                 type: array
                 items:
-                  $ref: '#/components/schemas/ProcedureStep'
+                  anyOf:
+                    - $ref: '#/components/schemas/ProcedureStepSummary'
+                    - $ref: '#/components/schemas/ProcedureStep'
+        '400':
+          $ref: '#/components/responses/400'
         '401':
           $ref: '#/components/responses/401'
         '403':
@@ -5018,6 +5080,116 @@ components:
           $ref: '#/components/schemas/UUID'
         name:
           type: string
+    EntitySummary:
+      type: object
+      allOf:
+        - type: object
+          properties:
+            variantID:
+              $ref: '#/components/schemas/UUID'
+            parentID:
+              oneOf:
+                - $ref: '#/components/schemas/UUID'
+                - type: 'null'
+            name:
+              type: string
+            pictureAssetID:
+              oneOf:
+                - $ref: '#/components/schemas/UUID'
+                - type: 'null'
+              description: In PATCH requests, omitting this property keeps the current picture unchanged. Sending `null` removes the picture.
+            status:
+              $ref: '#/components/schemas/EntityStatus'
+            tagIDs:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+            entityID:
+              $ref: '#/components/schemas/UUID'
+            access:
+              $ref: '#/components/schemas/AccessLevel'
+              description: Effective access level for the current user on this entity.
+            createVariantIDs:
+              type: array
+              description: Child variants the current user can create inside this entity.
+              items:
+                $ref: '#/components/schemas/UUID'
+            variant:
+              $ref: '#/components/schemas/EntityVariant'
+            parent:
+              oneOf:
+                - $ref: '#/components/schemas/EntityRef'
+                - type: 'null'
+            tags:
+              type: array
+              description: Present when `expand=tags` is requested.
+              items:
+                $ref: '#/components/schemas/Tag'
+            signs:
+              type: array
+              description: Present when `expand=signs` is requested.
+              items:
+                $ref: '#/components/schemas/Sign'
+            assets:
+              type: array
+              description: Present when `expand=assets` is requested.
+              items:
+                $ref: '#/components/schemas/Asset'
+            relatedEntities:
+              type: array
+              description: Present when `expand=relations` is requested.
+              items:
+                $ref: '#/components/schemas/EntityRef'
+            childCount:
+              type: integer
+              minimum: 0
+              description: Number of direct children (`parentID = this entityID`).
+            ancestors:
+              type: array
+              description: Present when `expand=ancestors` is requested. Ordered from root to direct parent.
+              items:
+                $ref: '#/components/schemas/EntityAncestorRef'
+            model3dLinkCount:
+              type: integer
+              minimum: 0
+              description: Number of direct Model3D links.
+            model3dLinks:
+              type: array
+              description: Present with expand=model3dLinks.
+              items:
+                type: object
+                properties:
+                  model3dID:
+                    type: string
+                    format: uuid
+                  nodeID:
+                    type:
+                      - string
+                      - 'null'
+                    format: uuid
+                  isModelRoot:
+                    type: boolean
+                required:
+                  - model3dID
+                  - nodeID
+                  - isModelRoot
+            hasDetail:
+              type: boolean
+              description: Whether the entity has non-whitespace description, non-empty metadata, a featured panel, signs, attachments other than its main picture, or readable related entities. It does not indicate whether detail fields have been loaded.
+          required:
+            - entityID
+            - variantID
+            - parentID
+            - name
+            - pictureAssetID
+            - status
+            - tagIDs
+            - access
+            - createVariantIDs
+            - childCount
+            - model3dLinkCount
+            - hasDetail
+        - $ref: '#/components/schemas/AuditFields'
     Entity3dMapping:
       type: object
       deprecated: true
@@ -5045,6 +5217,18 @@ components:
       required:
         - mainAssetFromModel3d
         - parentAssetFromModel3d
+    EntityLegacyMapping:
+      type: object
+      properties:
+        entity3dMapping:
+          oneOf:
+            - $ref: '#/components/schemas/Entity3dMapping'
+            - type: 'null'
+          deprecated: true
+    EntitySummaryWithLegacyMapping:
+      allOf:
+        - $ref: '#/components/schemas/EntitySummary'
+        - $ref: '#/components/schemas/EntityLegacyMapping'
     FeaturedPanel:
       type: object
       additionalProperties: false
@@ -5063,6 +5247,45 @@ components:
         color:
           type: string
           minLength: 1
+    EntityDetail:
+      allOf:
+        - $ref: '#/components/schemas/EntitySummary'
+        - type: object
+          properties:
+            description:
+              type:
+                - string
+                - 'null'
+            metadata:
+              $ref: '#/components/schemas/Metadata'
+            featuredPanel:
+              oneOf:
+                - $ref: '#/components/schemas/FeaturedPanel'
+                - type: 'null'
+            signIDs:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+            assetIDs:
+              type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+            relatedEntityIDs:
+              type: array
+              description: Soft symmetric relations visible from either side of the stored pair.
+              items:
+                $ref: '#/components/schemas/UUID'
+          required:
+            - description
+            - metadata
+            - featuredPanel
+            - signIDs
+            - assetIDs
+            - relatedEntityIDs
+    Entity:
+      allOf:
+        - $ref: '#/components/schemas/EntityDetail'
+        - $ref: '#/components/schemas/EntityLegacyMapping'
     EntityCore:
       type: object
       required:
@@ -5109,88 +5332,6 @@ components:
           description: Soft symmetric relations visible from either side of the stored pair.
           items:
             $ref: '#/components/schemas/UUID'
-    Entity:
-      type: object
-      allOf:
-        - type: object
-          properties:
-            entityID:
-              $ref: '#/components/schemas/UUID'
-            access:
-              $ref: '#/components/schemas/AccessLevel'
-              description: Effective access level for the current user on this entity.
-            createVariantIDs:
-              type: array
-              description: Child variants the current user can create inside this entity.
-              items:
-                $ref: '#/components/schemas/UUID'
-            variant:
-              $ref: '#/components/schemas/EntityVariant'
-            parent:
-              oneOf:
-                - $ref: '#/components/schemas/EntityRef'
-                - type: 'null'
-            tags:
-              type: array
-              description: Present when `expand=tags` is requested.
-              items:
-                $ref: '#/components/schemas/Tag'
-            signs:
-              type: array
-              description: Present when `expand=signs` is requested.
-              items:
-                $ref: '#/components/schemas/Sign'
-            assets:
-              type: array
-              description: Present when `expand=assets` is requested.
-              items:
-                $ref: '#/components/schemas/Asset'
-            relatedEntities:
-              type: array
-              description: Present when `expand=relations` is requested.
-              items:
-                $ref: '#/components/schemas/EntityRef'
-            childCount:
-              type: integer
-              minimum: 0
-              description: Number of direct children (`parentID = this entityID`).
-            ancestors:
-              type: array
-              description: Present when `expand=ancestors` is requested. Ordered from root to direct parent.
-              items:
-                $ref: '#/components/schemas/EntityAncestorRef'
-            entity3dMapping:
-              oneOf:
-                - $ref: '#/components/schemas/Entity3dMapping'
-                - type: 'null'
-            model3dLinkCount:
-              type: integer
-              minimum: 0
-              description: Number of direct Model3D links.
-            model3dLinks:
-              type: array
-              description: Present with expand=model3dLinks.
-              items:
-                type: object
-                properties:
-                  model3dID:
-                    type: string
-                    format: uuid
-                  nodeID:
-                    type:
-                      - string
-                      - 'null'
-                    format: uuid
-                  isModelRoot:
-                    type: boolean
-                required:
-                  - model3dID
-                  - nodeID
-                  - isModelRoot
-          required:
-            - model3dLinkCount
-        - $ref: '#/components/schemas/AuditFields'
-        - $ref: '#/components/schemas/EntityCore'
     EntitySearchResponse:
       type: object
       required:
@@ -5202,7 +5343,9 @@ components:
         items:
           type: array
           items:
-            $ref: '#/components/schemas/Entity'
+            anyOf:
+              - $ref: '#/components/schemas/EntitySummaryWithLegacyMapping'
+              - $ref: '#/components/schemas/Entity'
         total:
           type: integer
           minimum: 0
@@ -5528,6 +5671,37 @@ components:
         offset:
           type: integer
           minimum: 0
+    ProcedureStepSummary:
+      allOf:
+        - $ref: '#/components/schemas/EntitySummary'
+        - type: object
+          properties:
+            order:
+              type: integer
+              minimum: 0
+              description: Position used to sort steps. Values need not be consecutive. Deleting a step preserves the other order values.
+          required:
+            - order
+    ProcedureSummary:
+      allOf:
+        - $ref: '#/components/schemas/EntitySummary'
+        - type: object
+          properties:
+            stepCount:
+              type: integer
+              minimum: 0
+            scene3dAssetID:
+              oneOf:
+                - $ref: '#/components/schemas/UUID'
+                - type: 'null'
+            steps:
+              type: array
+              description: Present when expand=steps is requested.
+              items:
+                $ref: '#/components/schemas/ProcedureStepSummary'
+          required:
+            - stepCount
+            - scene3dAssetID
     ProcedureStepSpecializedCore:
       type: object
       properties:
@@ -5977,26 +6151,7 @@ components:
         entities:
           type: array
           items:
-            type: object
-            properties:
-              entityID:
-                type: string
-                format: uuid
-              variantID:
-                type: string
-                format: uuid
-              name:
-                type: string
-              access:
-                type: string
-                enum:
-                  - read
-                  - edit
-            required:
-              - entityID
-              - variantID
-              - name
-              - access
+            $ref: '#/components/schemas/EntitySummary'
       required:
         - model3dID
         - assetID

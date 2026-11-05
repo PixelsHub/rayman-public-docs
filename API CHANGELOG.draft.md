@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.22]
+
+### Changed
+
+- Entity and procedure/step collections return summaries by default; view=detail returns full records. Summaries include hasDetail and omit description, metadata, featuredPanel, signIDs, assetIDs and relatedEntityIDs; step summaries also omit animation. Existing expansions remain available.
+- GET /models3d/{model3dID}?expand=entities returns entity summaries without entity3dMapping or nested expansions.
+
+### Added
+
+- GET /entities accepts the entityIDs CSV filter for exact ID selection, combined with other filters using AND.
+- Entity, procedure and step responses expose hasDetail to indicate additional content.
+
 ## [1.0.0-draft.21]
 
 ### Changed
