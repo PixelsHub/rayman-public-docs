@@ -6,6 +6,18 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.23]
+
+### Removed
+
+- GET /entities/by-3d-mapping and GET, PUT and DELETE /entities/{entityID}/3d-mapping.
+- entity3dMapping from entity, procedure and step responses, including its mainAssetFromModel3d and parentAssetFromModel3d flags and the Entity3dMapping schema.
+
+### Changed
+
+- entity3dMapping is no longer a reserved input field; it follows ordinary handling of unknown properties.
+- Duplication no longer returns the legacy_3d_associations_pending error.
+
 ## [1.0.0-draft.22]
 
 ### Changed

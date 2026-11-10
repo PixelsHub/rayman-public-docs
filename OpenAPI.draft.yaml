@@ -9,7 +9,7 @@ info:
   license:
     name: All Rights Reserved
     url: https://choosealicense.com/no-permission/
-  version: 1.0.0-draft.22
+  version: 1.0.0-draft.23
 servers:
   - url: https://rayman.pixels-hub.com/dev/api
     description: Development server
@@ -2104,7 +2104,7 @@ paths:
                 type: array
                 items:
                   anyOf:
-                    - $ref: '#/components/schemas/EntitySummaryWithLegacyMapping'
+                    - $ref: '#/components/schemas/EntitySummary'
                     - $ref: '#/components/schemas/Entity'
         '400':
           $ref: '#/components/responses/400'
@@ -2225,48 +2225,6 @@ paths:
           $ref: '#/components/responses/403'
         '422':
           $ref: '#/components/responses/422'
-        5XX:
-          $ref: '#/components/responses/5XX'
-  /entities/by-3d-mapping:
-    get:
-      tags:
-        - Entities > 3D
-      summary: Resolves an entity from its 3D mapping reference.
-      deprecated: true
-      description: |
-        Deprecated legacy 3D mapping lookup, retained temporarily during development for clients not yet using the Model3D API.
-        Uses `mainAssetID` when `parentAssetPath` is omitted or empty. Otherwise resolves by `parentAssetID + parentAssetPath`.
-        This endpoint will be removed when development of the new 3D system is complete.
-      parameters:
-        - name: assetID
-          in: query
-          required: true
-          schema:
-            $ref: '#/components/schemas/UUID'
-        - name: parentAssetPath
-          in: query
-          required: false
-          schema:
-            type: string
-        - name: expand
-          in: query
-          required: false
-          description: 'CSV list of expansions. Supported values: assets, relations, signs, tags, parent, variant, ancestors, model3dLinks'
-          schema:
-            type: string
-      responses:
-        '200':
-          description: Operation completed successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Entity'
-        '401':
-          $ref: '#/components/responses/401'
-        '403':
-          $ref: '#/components/responses/403'
-        '404':
-          $ref: '#/components/responses/404'
         5XX:
           $ref: '#/components/responses/5XX'
   /entities/{entityID}:
@@ -2390,80 +2348,6 @@ paths:
           $ref: '#/components/responses/409'
         '422':
           $ref: '#/components/responses/422'
-        5XX:
-          $ref: '#/components/responses/5XX'
-  /entities/{entityID}/3d-mapping:
-    get:
-      tags:
-        - Entities > 3D
-      summary: Gets the 3D mapping attached to an entity.
-      deprecated: true
-      description: |
-        Deprecated legacy 3D mapping read, retained temporarily during development for clients not yet using the Model3D API.
-        This endpoint will be removed when development of the new 3D system is complete.
-      parameters:
-        - name: entityID
-          in: path
-          required: true
-          schema:
-            $ref: '#/components/schemas/UUID'
-      responses:
-        '200':
-          description: Operation completed successfully
-          content:
-            application/json:
-              schema:
-                $ref: '#/components/schemas/Entity3dMapping'
-        '401':
-          $ref: '#/components/responses/401'
-        '403':
-          $ref: '#/components/responses/403'
-        '404':
-          $ref: '#/components/responses/404'
-        5XX:
-          $ref: '#/components/responses/5XX'
-    put:
-      tags:
-        - Entities > 3D
-      summary: Legacy 3D mapping writes are disabled.
-      deprecated: true
-      description: Returns 409. Use the Model3D API to create and change associations.
-      parameters:
-        - name: entityID
-          in: path
-          required: true
-          schema:
-            $ref: '#/components/schemas/UUID'
-      requestBody:
-        required: true
-        content:
-          application/json:
-            schema:
-              $ref: '#/components/schemas/Entity3dMapping'
-      responses:
-        '401':
-          $ref: '#/components/responses/401'
-        '409':
-          $ref: '#/components/responses/409'
-        5XX:
-          $ref: '#/components/responses/5XX'
-    delete:
-      tags:
-        - Entities > 3D
-      summary: Legacy 3D mapping writes are disabled.
-      deprecated: true
-      description: Returns 409. Use the Model3D API to create and change associations.
-      parameters:
-        - name: entityID
-          in: path
-          required: true
-          schema:
-            $ref: '#/components/schemas/UUID'
-      responses:
-        '401':
-          $ref: '#/components/responses/401'
-        '409':
-          $ref: '#/components/responses/409'
         5XX:
           $ref: '#/components/responses/5XX'
   /entities/{entityID}/assets:
@@ -5190,45 +5074,6 @@ components:
             - model3dLinkCount
             - hasDetail
         - $ref: '#/components/schemas/AuditFields'
-    Entity3dMapping:
-      type: object
-      deprecated: true
-      description: |
-        Deprecated legacy 3D mapping contract, retained temporarily for compatibility. This contract and its endpoints are scheduled for removal.
-      properties:
-        mainAssetID:
-          oneOf:
-            - $ref: '#/components/schemas/UUID'
-            - type: 'null'
-        parentAssetID:
-          oneOf:
-            - $ref: '#/components/schemas/UUID'
-            - type: 'null'
-        parentAssetPath:
-          oneOf:
-            - type: string
-            - type: 'null'
-        mainAssetFromModel3d:
-          type: boolean
-          readOnly: true
-        parentAssetFromModel3d:
-          type: boolean
-          readOnly: true
-      required:
-        - mainAssetFromModel3d
-        - parentAssetFromModel3d
-    EntityLegacyMapping:
-      type: object
-      properties:
-        entity3dMapping:
-          oneOf:
-            - $ref: '#/components/schemas/Entity3dMapping'
-            - type: 'null'
-          deprecated: true
-    EntitySummaryWithLegacyMapping:
-      allOf:
-        - $ref: '#/components/schemas/EntitySummary'
-        - $ref: '#/components/schemas/EntityLegacyMapping'
     FeaturedPanel:
       type: object
       additionalProperties: false
@@ -5285,7 +5130,6 @@ components:
     Entity:
       allOf:
         - $ref: '#/components/schemas/EntityDetail'
-        - $ref: '#/components/schemas/EntityLegacyMapping'
     EntityCore:
       type: object
       required:
@@ -5344,7 +5188,7 @@ components:
           type: array
           items:
             anyOf:
-              - $ref: '#/components/schemas/EntitySummaryWithLegacyMapping'
+              - $ref: '#/components/schemas/EntitySummary'
               - $ref: '#/components/schemas/Entity'
         total:
           type: integer
@@ -5939,7 +5783,7 @@ components:
                   - DELETE
               body:
                 type: object
-                description: EntityCreate for POST, EntityUpdate for PATCH. entity3dMapping is reserved and rejects non-null values.
+                description: EntityCreate for POST, EntityUpdate for PATCH.
                 additionalProperties: true
             required:
               - operation
@@ -6252,7 +6096,7 @@ components:
                   - DELETE
               body:
                 type: object
-                description: EntityCreate for POST, EntityUpdate for PATCH. entity3dMapping is reserved and rejects non-null values.
+                description: EntityCreate for POST, EntityUpdate for PATCH.
                 additionalProperties: true
             required:
               - operation
