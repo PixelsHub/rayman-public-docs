@@ -9,7 +9,7 @@ info:
   license:
     name: All Rights Reserved
     url: https://choosealicense.com/no-permission/
-  version: 1.0.0-draft.23
+  version: 1.0.0-draft.24
 servers:
   - url: https://rayman.pixels-hub.com/dev/api
     description: Development server
@@ -6134,6 +6134,7 @@ components:
           properties:
             add:
               type: array
+              description: Links to create. Each entity must exist and each specified assetNodeIndex must identify a node in the resulting snapshot.
               items:
                 type: object
                 properties:
@@ -6153,6 +6154,7 @@ components:
                   - entityID
             remove:
               type: array
+              description: Links to remove, matching entityID, resulting assetNodeIndex and isModelRoot exactly. Absent links are silently ignored, including missing nodes or entities. Existing links require write access to their consumer.
               items:
                 type: object
                 properties:

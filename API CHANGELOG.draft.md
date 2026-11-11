@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.24]
+
+### Changed
+
+- PATCH /models3d/{model3dID}: links.remove silently ignores absent links, including references to missing nodes or entities. links.add still requires an existing entity and a node in the resulting snapshot when specified.
+
 ## [1.0.0-draft.23]
 
 ### Removed
