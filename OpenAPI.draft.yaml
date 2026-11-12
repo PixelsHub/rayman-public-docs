@@ -9,7 +9,7 @@ info:
   license:
     name: All Rights Reserved
     url: https://choosealicense.com/no-permission/
-  version: 1.0.0-draft.24
+  version: 1.0.0-draft.25
 servers:
   - url: https://rayman.pixels-hub.com/dev/api
     description: Development server
@@ -5201,6 +5201,7 @@ components:
           minimum: 0
     EntityUpdate:
       type: object
+      description: Partial update shared by entities, procedures and procedure steps.
       properties:
         parentID:
           oneOf:
@@ -5233,13 +5234,19 @@ components:
           items:
             $ref: '#/components/schemas/UUID'
         assetIDs:
-          type: array
-          items:
-            $ref: '#/components/schemas/UUID'
+          oneOf:
+            - type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+            - type: 'null'
+          description: Complete replacement of this resource's asset associations. IDs absent from the supplied array are unlinked; send `[]` to remove all asset associations. Omitting this property or sending `null` keeps existing associations unchanged. Duplicate IDs are ignored. Unlinking does not delete the assets or change pictureAssetID.
         relatedEntityIDs:
-          type: array
-          items:
-            $ref: '#/components/schemas/UUID'
+          oneOf:
+            - type: array
+              items:
+                $ref: '#/components/schemas/UUID'
+            - type: 'null'
+          description: 'Complete replacement of this resource''s related entities. IDs absent from the supplied array are unlinked; send `[]` to remove all its entity relations. Omitting this property or sending `null` keeps existing relations unchanged. Duplicate IDs are ignored. Relations are symmetric: adding or removing a relation affects both ends, including relations originally added from the other entity. Unlinking does not delete the related entities.'
     BulkEntityCreateItem:
       allOf:
         - type: object

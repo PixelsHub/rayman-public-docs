@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.25]
+
+### Changed
+
+- Clarified `assetIDs` and `relatedEntityIDs` in PATCH /entities/{entityID}, PATCH /procedures/{procedureID} and PATCH /procedures/{procedureID}/steps/{stepID}: arrays replace the complete association set, excluding an existing ID unlinks it, and `[]` clears the set. Omission or `null` leaves that set unchanged; duplicate IDs are ignored. Removing associations does not delete the referenced resources, and entity relations are symmetric.
+
 ## [1.0.0-draft.24]
 
 ### Changed
