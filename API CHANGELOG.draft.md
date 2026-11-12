@@ -6,6 +6,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.26]
+
+### Removed
+
+- `inheritedPermissionsOnly` and `disabled` from entity variant create/update requests and responses.
+
 ## [1.0.0-draft.25]
 
 ### Changed

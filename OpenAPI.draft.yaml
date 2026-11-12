@@ -9,7 +9,7 @@ info:
   license:
     name: All Rights Reserved
     url: https://choosealicense.com/no-permission/
-  version: 1.0.0-draft.25
+  version: 1.0.0-draft.26
 servers:
   - url: https://rayman.pixels-hub.com/dev/api
     description: Development server
@@ -4808,12 +4808,6 @@ components:
       properties:
         type:
           $ref: '#/components/schemas/EntityType'
-        inheritedPermissionsOnly:
-          type: boolean
-          default: false
-        disabled:
-          type: boolean
-          default: false
         nameSingular:
           type: string
         namePlural:
@@ -4833,10 +4827,6 @@ components:
     EntityVariantUpdate:
       type: object
       properties:
-        inheritedPermissionsOnly:
-          type: boolean
-        disabled:
-          type: boolean
         nameSingular:
           type: string
         namePlural:
