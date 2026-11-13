@@ -9,7 +9,7 @@ info:
   license:
     name: All Rights Reserved
     url: https://choosealicense.com/no-permission/
-  version: 1.0.0-draft.26
+  version: 1.0.0-draft.28
 servers:
   - url: https://rayman.pixels-hub.com/dev/api
     description: Development server
@@ -378,6 +378,7 @@ paths:
       tags:
         - Users
       summary: Creates a new user.
+      description: An owner cannot be created disabled. Such requests return 409 with error owner_protected.
       requestBody:
         required: true
         content:
@@ -449,6 +450,7 @@ paths:
       tags:
         - Users
       summary: Updates a user.
+      description: Email changes are not supported, including self edits and requests by privileged users. An unchanged email may be included with other profile fields. An owner cannot be disabled or demoted through PATCH; these requests return 409 with error owner_protected. A disabled user cannot be made an owner unless enabled in the same request.
       parameters:
         - name: userID
           in: path
@@ -477,13 +479,14 @@ paths:
         '409':
           $ref: '#/components/responses/409'
         '422':
-          $ref: '#/components/responses/422'
+          description: Invalid request. Changing email returns error user_email_change_not_allowed and leaves the user unchanged.
         5XX:
           $ref: '#/components/responses/5XX'
     delete:
       tags:
         - Users
       summary: Deletes a user.
+      description: Owners cannot be deleted, including by themselves or privileged callers. Such requests return 409 with error owner_protected.
       parameters:
         - name: userID
           in: path
@@ -4124,6 +4127,7 @@ components:
         disabled:
           type: boolean
           default: false
+          description: Owners must remain enabled. Creating a disabled owner returns 409 with error owner_protected.
         isOwner:
           type: boolean
         avatarAssetID:
@@ -4196,6 +4200,7 @@ components:
         email:
           type: string
           format: email
+          description: When supplied, must exactly match the current email. Email changes return 422 with error user_email_change_not_allowed.
         name:
           type: string
         surname1:
@@ -4206,8 +4211,10 @@ components:
           type: string
         disabled:
           type: boolean
+          description: Setting this to true for an owner returns 409 with error owner_protected.
         isOwner:
           type: boolean
+          description: An existing owner cannot be demoted through PATCH. An owner must remain enabled. Conflicting requests return 409 with error owner_protected.
     PrincipalType:
       type: string
       description: Use a listed name. Unsupported or numeric strings return 422.

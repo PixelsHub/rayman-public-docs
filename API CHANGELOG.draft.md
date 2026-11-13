@@ -6,6 +6,20 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.0-draft.28]
+
+### Changed
+
+- POST /users rejects disabled owners with 409 and error owner_protected.
+- PATCH /users/{userID} rejects disabling or demoting an owner with 409 and error owner_protected. Making a disabled user an owner requires enabling the user in the same request.
+- DELETE /users/{userID} rejects deleting an owner with 409 and error owner_protected, including self deletion and privileged callers.
+
+## [1.0.0-draft.27]
+
+### Changed
+
+- PATCH /users/{userID} rejects email changes with 422 and error user_email_change_not_allowed, including self edits and privileged callers. The existing email may still be supplied unchanged. POST /users continues to accept the initial email.
+
 ## [1.0.0-draft.26]
 
 ### Removed
