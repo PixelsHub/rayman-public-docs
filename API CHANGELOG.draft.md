@@ -2,9 +2,13 @@
 
 All notable changes to the Rayman API are documented in this file.
 
-The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and this project uses draft versions for the OpenAPI definition.
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Stable OpenAPI releases use versions without a prerelease suffix; upcoming changes use draft versions.
 
 ## [Unreleased]
+
+## [1.0.0] - 2026-11-13
+
+First stable release of the Rayman 1.x HTTP API, promoting `1.0.0-draft.28` with the same operations, authentication requirements, request/response schemas and errors. The draft entries below document the changes included in this release.
 
 ## [1.0.0-draft.28]
 

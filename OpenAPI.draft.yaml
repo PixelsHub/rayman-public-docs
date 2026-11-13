@@ -2,14 +2,14 @@ openapi: 3.1.0
 info:
   title: PixelsHub Rayman
   description: |
-    Draft contract for the Rayman 1.x API.
+    Contract for the Rayman 1.x API.
     Authentication accepts both bearer JWT headers and the `rayman_auth` cookie.
   contact:
     email: desarrollo@pixels-hub.com
   license:
     name: All Rights Reserved
     url: https://choosealicense.com/no-permission/
-  version: 1.0.0-draft.28
+  version: 1.0.0
 servers:
   - url: https://rayman.pixels-hub.com/dev/api
     description: Development server
