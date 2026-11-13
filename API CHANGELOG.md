@@ -1,0 +1,264 @@
+# Changelog
+
+All notable changes to the Rayman API are documented in this file.
+
+The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/). Stable OpenAPI releases use versions without a prerelease suffix; upcoming changes use draft versions.
+
+## [Unreleased]
+
+## [1.0.0] - 2026-11-13
+
+First stable release of the Rayman 1.x HTTP API, promoting `1.0.0-draft.28` with the same operations, authentication requirements, request/response schemas and errors. The draft entries below document the changes included in this release.
+
+## [1.0.0-draft.28]
+
+### Changed
+
+- POST /users rejects disabled owners with 409 and error owner_protected.
+- PATCH /users/{userID} rejects disabling or demoting an owner with 409 and error owner_protected. Making a disabled user an owner requires enabling the user in the same request.
+- DELETE /users/{userID} rejects deleting an owner with 409 and error owner_protected, including self deletion and privileged callers.
+
+## [1.0.0-draft.27]
+
+### Changed
+
+- PATCH /users/{userID} rejects email changes with 422 and error user_email_change_not_allowed, including self edits and privileged callers. The existing email may still be supplied unchanged. POST /users continues to accept the initial email.
+
+## [1.0.0-draft.26]
+
+### Removed
+
+- `inheritedPermissionsOnly` and `disabled` from entity variant create/update requests and responses.
+
+## [1.0.0-draft.25]
+
+### Changed
+
+- Clarified `assetIDs` and `relatedEntityIDs` in PATCH /entities/{entityID}, PATCH /procedures/{procedureID} and PATCH /procedures/{procedureID}/steps/{stepID}: arrays replace the complete association set, excluding an existing ID unlinks it, and `[]` clears the set. Omission or `null` leaves that set unchanged; duplicate IDs are ignored. Removing associations does not delete the referenced resources, and entity relations are symmetric.
+
+## [1.0.0-draft.24]
+
+### Changed
+
+- PATCH /models3d/{model3dID}: links.remove silently ignores absent links, including references to missing nodes or entities. links.add still requires an existing entity and a node in the resulting snapshot when specified.
+
+## [1.0.0-draft.23]
+
+### Removed
+
+- GET /entities/by-3d-mapping and GET, PUT and DELETE /entities/{entityID}/3d-mapping.
+- entity3dMapping from entity, procedure and step responses, including its mainAssetFromModel3d and parentAssetFromModel3d flags and the Entity3dMapping schema.
+
+### Changed
+
+- entity3dMapping is no longer a reserved input field; it follows ordinary handling of unknown properties.
+- Duplication no longer returns the legacy_3d_associations_pending error.
+
+## [1.0.0-draft.22]
+
+### Changed
+
+- Entity and procedure/step collections return summaries by default; view=detail returns full records. Summaries include hasDetail and omit description, metadata, featuredPanel, signIDs, assetIDs and relatedEntityIDs; step summaries also omit animation. Existing expansions remain available.
+- GET /models3d/{model3dID}?expand=entities returns entity summaries without entity3dMapping or nested expansions.
+
+### Added
+
+- GET /entities accepts the entityIDs CSV filter for exact ID selection, combined with other filters using AND.
+- Entity, procedure and step responses expose hasDetail to indicate additional content.
+
+## [1.0.0-draft.21]
+
+### Changed
+
+- GET /assets returns an items/total/limit/offset page instead of a plain array. Default limit is 50; limit=-1 returns all matching results from offset. Invalid pagination returns 400.
+
+## [1.0.0-draft.20]
+
+### Added
+
+- Model3D list, detail, create, update, link, unlink, direct forks and node reference-map operations, including optional model/node pictures and structured validation errors.
+- Entity model3dLinkCount and optional expand=model3dLinks references; computed origin flags on legacy 3D mappings.
+
+### Changed
+
+- Legacy 3D mapping writes are rejected; non-null entity3dMapping is no longer accepted in entity writes. Null remains equivalent to omission.
+- Duplication returns 409 while the selected entities retain legacy 3D associations.
+- Asset reads require access through their uses or another applicable asset access rule.
+
+
+## [1.0.0-draft.19]
+
+### Fixed
+
+- Invalid enum names and numeric enum strings in entity, procedure, asset and grant inputs return 422 instead of using a default value or ignoring the filter. Omitted optional values keep their existing defaults.
+
+## [1.0.0-draft.18]
+
+### Changed
+
+- Step deletion preserves the remaining order values; gaps are allowed. Step counts include procedure steps only.
+
+## [1.0.0-draft.17]
+
+### Fixed
+
+- Grant mutations require permission administration; tag/sign mutations require variant administration. Procedure/step deletion requires write access and rejects IDs of another resource type or steps belonging to another procedure.
+- Self profile edits preserve email changes while disabled/isOwner require users/write. Queries of another user's effective permissions no longer inherit the caller's global role.
+- After a user's suspension takes effect, login, organization selection and refresh reject that organization. Existing sessions remain usable until expiration. Reactivation restores login with the existing password.
+
+## [1.0.0-draft.16]
+
+### Fixed
+
+- JWTs require numeric expiration and HS256. Optional not-before is enforced. Valid bearer and cookie sessions remain compatible.
+
+## [1.0.0-draft.15]
+
+### Changed
+
+- Temporary contention preventing an operation returns 503 with error permission_operation_timeout and leaves its changes unapplied.
+
+## [1.0.0-draft.14]
+
+### Changed
+
+- Metadata responses use arrays of MetadataField objects with stable field IDs.
+- POST/PATCH metadata and multipart asset metadata accept only the documented array format; supplied nulls, legacy objects and malformed fields return 422. Omitted metadata remains optional.
+- Bulk issues omit path, entityID and params when they have no value.
+
+## [1.0.0-draft.13]
+
+### Changed
+
+- Asset downloads document arbitrary media types using `*/*` for successful full and partial responses. The response Content-Type describes the original asset; the contract does not enumerate or restrict file media types.
+
+## [1.0.0-draft.12]
+
+### Deprecated
+
+- Deprecated both reads and the PUT/DELETE writes of the legacy 3D mapping endpoints, along with the `Entity3dMapping` schema. They remain temporary development compatibility contracts and will be removed when the new 3D system is complete.
+
+## [1.0.0-draft.11]
+
+### Changed
+
+- Login and password reset identifier lookups are now case-insensitive, including existing mixed-case identifiers.
+- New and updated authentication identifiers are stored in lowercase, and duplicate email checks ignore case. Passwords remain case-sensitive.
+
+## [1.0.0-draft.10]
+
+### Added
+
+- Added atomic bulk create with client-assigned entity UUIDs.
+- Added one ordered bulk PATCH for explicit IDs, subtrees and variant-wide targets, including status, links and explicit-ID reparenting.
+- Added subtree exclusions and variant-aware smart tag/sign assignment.
+- Added subtree-aware bulk delete under `/entities/bulk/delete`.
+- Added atomic duplication of multiple independent subtrees.
+- Added optional preview and idempotency support.
+- Added structured, localizable bulk errors with English fallback messages.
+
+## [1.0.0-draft.9]
+
+### Added
+
+- Added the optional `status` filter to `GET /entities/search`.
+- Allowed `status` to be used as the sole search criterion.
+
+### Changed
+
+- Clarified that the `status` filter uses the same `EntityStatus` semantics as `GET /entities` and combines with other search filters using AND.
+
+## [1.0.0-draft.8]
+
+### Added
+
+- Added `featuredPanel` to entity-shaped contracts (`Entity`, `Procedure`, `ProcedureStep`) for prominent UI panels.
+
+### Changed
+
+- Defined `featuredPanel` update semantics: omitted keeps the current value, explicit `null` clears it.
+- Updated the sign color contract to support nominal tokens and legacy hex values (`string`, max length 24).
+
+## [1.0.0-draft.7]
+
+### Added
+
+- Added `user_deleted` to the actor type.
+- Documented `avatarAssetID` in `UserUpdate` with PATCH null/omit semantics.
+
+### Changed
+
+- Defined user deletion behavior to anonymize linked actors (`type=user_deleted`, `displayName='Deleted User'`) and clear actor/user avatar links.
+
+## [1.0.0-draft.6]
+
+### Added
+
+- Added `DELETE /users/{userID}` to the core API.
+
+### Changed
+
+- Updated authentication success payloads to return `actor` instead of `user`.
+
+## [1.0.0-draft.5]
+
+### Added
+
+- Added `DELETE /entity-variants/{variantID}`.
+
+### Changed
+
+- Defined delete behavior: deletion is blocked with a conflict when entities still reference the variant.
+
+## [1.0.0-draft.4]
+
+### Added
+
+- Added `POST /entities/{entityID}/duplicate` to clone an entity subtree.
+
+### Changed
+
+- Moved `status` from the `Procedure` specialization to the shared `Entity` contract.
+- Updated `GET /procedures?status=...` to reuse the shared `EntityStatus` enum.
+- Documented clone semantics: composed records and linked assets are duplicated, with independent asset references.
+
+## [1.0.0-draft.3]
+
+### Added
+
+- Added `expand=ancestors` for `entities`, `procedures` and `procedure steps`.
+- Added an `ancestors` payload to entity-shaped responses with lightweight breadcrumb data (`entityID`, `name`) ordered from root to parent.
+- Added `childCount` to entity-shaped responses (`Entity`, `Procedure`, `ProcedureStep`) with a direct-children count.
+- Added `GET /sign-icons` to list available sign icon IDs.
+
+### Changed
+
+- Updated `GET /entities` to accept `parentID=null` (literal query value) as a root-only filter.
+
+## [1.0.0-draft.2]
+
+### Added
+
+- Added entity relations and allowed child-variant relationships for `parentID`.
+- Added `/entities/{entityID}/relations` endpoints.
+- Added `/entity-variants/{variantID}/children` endpoints.
+- Added `relatedEntityIDs` / `relatedEntities` to `Entity`.
+- Added `childVariantIDs` / `childVariants` to `EntityVariant`.
+- Added `DELETE /entities/{entityID}/3d-mapping` to remove the 3D mapping from an entity.
+- Added 3D mapping endpoints plus reverse lookup by `assetID` and optional `parentAssetPath`.
+
+### Changed
+
+- Clarified that assigning `parentID` requires an allowed `parent variant -> child variant` relationship.
+- Entity relations can be queried from either related entity.
+
+## [1.0.0-draft.1]
+
+### Added
+
+- Created the initial 1.x draft from the new entity-based schema.
+- Introduced generic resources for `entity-variants`, `entities`, `assets` and `permission-groups`.
+- Reframed procedures as specialized entities with `procedures` and `procedures/{procedureID}/steps`.
+- Reframed legacy templates as `metadataTemplate` on variants.
+- Reframed entity custom data as `metadata`.
+- Standardized `metadata` and `metadataTemplate` as a shared metadata payload.
